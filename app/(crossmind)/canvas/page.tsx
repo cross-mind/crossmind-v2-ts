@@ -1,7 +1,7 @@
 "use client";
 
 import { Bot, FileText, Send, Sparkles, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { SidebarToggle } from "@/components/sidebar-toggle";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";

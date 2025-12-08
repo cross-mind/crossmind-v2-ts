@@ -14,7 +14,7 @@ import {
   Send,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import React, { useState } from "react";
 import { SidebarToggle } from "@/components/sidebar-toggle";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";

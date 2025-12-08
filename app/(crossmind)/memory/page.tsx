@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowRight, Brain, Clock, FileText, Search, Sparkles } from "lucide-react";
-import { useState } from "react";
+import React, { useState } from "react";
 import { SidebarToggle } from "@/components/sidebar-toggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

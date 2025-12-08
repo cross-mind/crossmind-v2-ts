@@ -14,7 +14,7 @@ import {
   RefreshCw,
   Settings,
 } from "lucide-react";
-import { useState } from "react";
+import React, { useState } from "react";
 import { SidebarToggle } from "@/components/sidebar-toggle";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";

@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 import Script from "next/script";
-import { Suspense } from "react";
+import React, { Suspense } from "react";
 import { CrossMindSidebar } from "@/components/crossmind-sidebar";
 import { DataStreamProvider } from "@/components/data-stream-provider";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";

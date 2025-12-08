@@ -1,21 +1,21 @@
 "use client";
 
+import React, { useState } from "react";
 import {
-  CheckCircle2,
-  Clock,
-  Code2,
-  FileText,
-  Github,
-  Globe,
-  MessageSquare,
-  Search,
-  Shield,
-  Sparkles,
-  Star,
-  X,
-  Zap,
+	CheckCircle2,
+	Clock,
+	Code2,
+	FileText,
+	Github,
+	Globe,
+	MessageSquare,
+	Search,
+	Shield,
+	Sparkles,
+	Star,
+	X,
+	Zap,
 } from "lucide-react";
-import { useState } from "react";
 import { SidebarToggle } from "@/components/sidebar-toggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
