@@ -9,7 +9,7 @@ import {
 } from "@playwright/test";
 import { generateId } from "ai";
 import { getUnixTime } from "date-fns";
-import { ChatPage } from "./pages/chat";
+import { ChatPage } from "./page-objects/chat";
 
 export type UserContext = {
   context: BrowserContext;
