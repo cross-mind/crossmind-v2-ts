@@ -10,6 +10,9 @@
 - **[业务需求](./requirements/)** - 产品定位、功能模块定义
   - [概述](./requirements/01-overview.md) - 产品定位、核心价值主张
   - [产品功能模块](./requirements/02-features.md) - Canvas、任务中心、Agent 雇佣中心
+  - [用户画像与场景](./requirements/03-user-personas.md) - 用户画像和使用场景
+  - [用户旅程设计](./requirements/04-user-journey.md) - 用户体验旅程
+  - **[模块需求设计](./requirements/modules/)** - 按功能模块的详细需求设计（12 个模块）
 
 ### 技术文档
 
@@ -33,7 +36,8 @@
 ### 对于产品经理/业务人员
 1. 阅读 [PRD](./PRD.md) 了解产品需求
 2. 查看 [业务需求](./requirements/) 了解功能定义
-3. 参考 [设计系统](./DESIGN_SYSTEM.md) 了解界面设计
+3. 参考 [模块需求设计](./requirements/modules/) 了解详细的业务和产品需求
+4. 参考 [设计系统](./DESIGN_SYSTEM.md) 了解界面设计
 
 ### 对于开发人员
 1. 阅读 [技术架构设计](./ARCHITECTURE.md) 了解整体架构
@@ -58,7 +62,23 @@ docs/
 │
 ├── requirements/                # 业务需求文档
 │   ├── 01-overview.md          # 概述
-│   └── 02-features.md          # 产品功能模块
+│   ├── 02-features.md          # 产品功能模块
+│   ├── 03-user-personas.md     # 用户画像
+│   ├── 04-user-journey.md      # 用户旅程
+│   └── modules/                # 模块需求设计（12 个模块）
+│       ├── README.md           # 模块文档导航
+│       ├── 05-canvas-core.md   # Canvas 核心功能
+│       ├── 06-canvas-ai.md     # Canvas AI 增强
+│       ├── 07-task-management.md        # 任务管理核心
+│       ├── 08-task-collaboration.md     # 任务协作功能
+│       ├── 09-agent-marketplace.md      # Agent 雇佣中心
+│       ├── 10-agent-execution.md        # Agent 执行与反馈
+│       ├── 11-tagging-system.md         # 标签系统
+│       ├── 12-ai-integration.md         # AI 能力集成
+│       ├── 13-realtime-collaboration.md # 实时协作
+│       ├── 14-notification-system.md    # 通知系统
+│       ├── 15-knowledge-base.md         # 知识库
+│       └── 16-onboarding.md             # 新手引导
 │
 └── architecture/                # 技术架构文档
     ├── 01-architecture-principles.md  # 架构原则
