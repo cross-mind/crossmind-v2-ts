@@ -1,8 +1,7 @@
-import React, { CSSProperties } from "react";
+import React, { type CSSProperties } from "react";
 import { cn } from "@/lib/utils";
 
-export interface ShimmerButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+export interface ShimmerButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   shimmerColor?: string;
   shimmerSize?: string;
   borderRadius?: string;

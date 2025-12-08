@@ -1,28 +1,28 @@
 "use client";
 
+import {
+  Bot,
+  CheckCircle2,
+  Circle,
+  CircleDashed,
+  Clock,
+  Edit2,
+  FileText,
+  Layout,
+  MessageSquare,
+  Plus,
+  Send,
+  X,
+} from "lucide-react";
 import { useState } from "react";
+import { SidebarToggle } from "@/components/sidebar-toggle";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { SidebarToggle } from "@/components/sidebar-toggle";
-import {
-  Plus,
-  Circle,
-  CheckCircle2,
-  CircleDashed,
-  Layout,
-  X,
-  Send,
-  MessageSquare,
-  Clock,
-  Bot,
-  Edit2,
-  FileText
-} from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
 interface Task {
@@ -56,41 +56,140 @@ interface Activity {
 }
 
 const COLUMN_TASKS: Record<string, Task[]> = {
-  "Todo": [
-    { id: "1", title: "Setup React project with Vite", tag: "Dev", assignee: "JD", priority: "High", status: "Todo", description: "Initialize a new React project using Vite with TypeScript support. Configure ESLint and Prettier." },
-    { id: "2", title: "Design Logo and Brand Assets", tag: "Design", priority: "Medium", status: "Todo", description: "Create logo variations and brand color palette." },
+  Todo: [
+    {
+      id: "1",
+      title: "Setup React project with Vite",
+      tag: "Dev",
+      assignee: "JD",
+      priority: "High",
+      status: "Todo",
+      description:
+        "Initialize a new React project using Vite with TypeScript support. Configure ESLint and Prettier.",
+    },
+    {
+      id: "2",
+      title: "Design Logo and Brand Assets",
+      tag: "Design",
+      priority: "Medium",
+      status: "Todo",
+      description: "Create logo variations and brand color palette.",
+    },
   ],
   "In Progress": [
-    { id: "3", title: "Draft PRD v1.0", tag: "Marketing", assignee: "ME", priority: "High", status: "In Progress", description: "Write comprehensive product requirements document covering all MVP features.", relatedDocId: "doc-3" },
+    {
+      id: "3",
+      title: "Draft PRD v1.0",
+      tag: "Marketing",
+      assignee: "ME",
+      priority: "High",
+      status: "In Progress",
+      description: "Write comprehensive product requirements document covering all MVP features.",
+      relatedDocId: "doc-3",
+    },
   ],
-  "Done": [
-    { id: "4", title: "Initial Idea Brainstorming", tag: "Marketing", assignee: "ME", priority: "Low", status: "Done", description: "Conduct initial brainstorming session and document key ideas.", relatedDocId: "doc-1" },
+  Done: [
+    {
+      id: "4",
+      title: "Initial Idea Brainstorming",
+      tag: "Marketing",
+      assignee: "ME",
+      priority: "Low",
+      status: "Done",
+      description: "Conduct initial brainstorming session and document key ideas.",
+      relatedDocId: "doc-1",
+    },
   ],
 };
 
 const MOCK_COMMENTS: Record<string, Comment[]> = {
   "1": [
-    { id: "c1", author: "JD", content: "Should we use Vite or Next.js for this project?", timestamp: "2024-12-06T10:30:00" },
-    { id: "c2", author: "AI Assistant", content: "Based on the project requirements, Vite is recommended for faster development and simpler setup.", timestamp: "2024-12-06T10:32:00", isAI: true },
+    {
+      id: "c1",
+      author: "JD",
+      content: "Should we use Vite or Next.js for this project?",
+      timestamp: "2024-12-06T10:30:00",
+    },
+    {
+      id: "c2",
+      author: "AI Assistant",
+      content:
+        "Based on the project requirements, Vite is recommended for faster development and simpler setup.",
+      timestamp: "2024-12-06T10:32:00",
+      isAI: true,
+    },
   ],
   "3": [
-    { id: "c3", author: "ME", content: "First draft is ready for review. @JD please take a look.", timestamp: "2024-12-06T14:20:00" },
+    {
+      id: "c3",
+      author: "ME",
+      content: "First draft is ready for review. @JD please take a look.",
+      timestamp: "2024-12-06T14:20:00",
+    },
   ],
 };
 
 const MOCK_ACTIVITIES: Record<string, Activity[]> = {
   "1": [
-    { id: "a1", type: "status_change", actor: "JD", action: "moved task to", details: "Todo", timestamp: "2024-12-06T09:00:00" },
-    { id: "a2", type: "field_change", actor: "JD", action: "assigned to", details: "JD", timestamp: "2024-12-06T09:01:00" },
-    { id: "a3", type: "field_change", actor: "JD", action: "set priority to", details: "High", timestamp: "2024-12-06T09:02:00" },
+    {
+      id: "a1",
+      type: "status_change",
+      actor: "JD",
+      action: "moved task to",
+      details: "Todo",
+      timestamp: "2024-12-06T09:00:00",
+    },
+    {
+      id: "a2",
+      type: "field_change",
+      actor: "JD",
+      action: "assigned to",
+      details: "JD",
+      timestamp: "2024-12-06T09:01:00",
+    },
+    {
+      id: "a3",
+      type: "field_change",
+      actor: "JD",
+      action: "set priority to",
+      details: "High",
+      timestamp: "2024-12-06T09:02:00",
+    },
   ],
   "3": [
-    { id: "a4", type: "status_change", actor: "ME", action: "moved task to", details: "In Progress", timestamp: "2024-12-06T10:00:00" },
-    { id: "a5", type: "comment", actor: "ME", action: "commented", timestamp: "2024-12-06T14:20:00" },
+    {
+      id: "a4",
+      type: "status_change",
+      actor: "ME",
+      action: "moved task to",
+      details: "In Progress",
+      timestamp: "2024-12-06T10:00:00",
+    },
+    {
+      id: "a5",
+      type: "comment",
+      actor: "ME",
+      action: "commented",
+      timestamp: "2024-12-06T14:20:00",
+    },
   ],
   "4": [
-    { id: "a6", type: "status_change", actor: "ME", action: "moved task to", details: "Done", timestamp: "2024-12-05T16:00:00" },
-    { id: "a7", type: "agent_update", actor: "AI Assistant", action: "updated task", details: "Added related document link", timestamp: "2024-12-05T16:05:00" },
+    {
+      id: "a6",
+      type: "status_change",
+      actor: "ME",
+      action: "moved task to",
+      details: "Done",
+      timestamp: "2024-12-05T16:00:00",
+    },
+    {
+      id: "a7",
+      type: "agent_update",
+      actor: "AI Assistant",
+      action: "updated task",
+      details: "Added related document link",
+      timestamp: "2024-12-05T16:05:00",
+    },
   ],
 };
 
@@ -107,9 +206,9 @@ const PRIORITY_COLORS = {
 };
 
 const STATUS_ICONS = {
-  "Todo": <Circle className="h-3.5 w-3.5 text-muted-foreground" />,
+  Todo: <Circle className="h-3.5 w-3.5 text-muted-foreground" />,
   "In Progress": <CircleDashed className="h-3.5 w-3.5 text-yellow-600" />,
-  "Done": <CheckCircle2 className="h-3.5 w-3.5 text-primary" />,
+  Done: <CheckCircle2 className="h-3.5 w-3.5 text-primary" />,
 };
 
 export default function TaskBoardPage() {
@@ -190,15 +289,15 @@ export default function TaskBoardPage() {
                     key={task.id}
                     className={cn(
                       "group p-3 border rounded-lg hover:bg-muted/40 cursor-pointer transition-colors",
-                      selectedTask?.id === task.id && "border-primary bg-primary/5"
+                      selectedTask?.id === task.id && "border-primary bg-primary/5",
                     )}
                     onClick={() => handleTaskClick(task)}
                   >
                     <div className="flex items-start gap-2 mb-2">
-                      <div className={`h-1.5 w-1.5 rounded-full ${PRIORITY_COLORS[task.priority]} mt-1 shrink-0`} />
-                      <p className="text-sm text-foreground flex-1 leading-snug">
-                        {task.title}
-                      </p>
+                      <div
+                        className={`h-1.5 w-1.5 rounded-full ${PRIORITY_COLORS[task.priority]} mt-1 shrink-0`}
+                      />
+                      <p className="text-sm text-foreground flex-1 leading-snug">{task.title}</p>
                     </div>
 
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -232,10 +331,14 @@ export default function TaskBoardPage() {
           >
             <div className="flex items-center justify-between p-4 border-b shrink-0 bg-muted/10">
               <div className="flex items-center gap-3">
-                <div className={`h-1.5 w-1.5 rounded-full ${PRIORITY_COLORS[selectedTask.priority]}`} />
+                <div
+                  className={`h-1.5 w-1.5 rounded-full ${PRIORITY_COLORS[selectedTask.priority]}`}
+                />
                 <div>
                   <h2 className="font-semibold text-sm">{selectedTask.title}</h2>
-                  <p className="text-xs text-muted-foreground capitalize">{selectedTask.tag} • {selectedTask.status}</p>
+                  <p className="text-xs text-muted-foreground capitalize">
+                    {selectedTask.tag} • {selectedTask.status}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -249,21 +352,11 @@ export default function TaskBoardPage() {
                     <Edit2 className="h-4 w-4" />
                   </Button>
                 ) : (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleSaveTask}
-                    className="h-8"
-                  >
+                  <Button variant="ghost" size="sm" onClick={handleSaveTask} className="h-8">
                     Save
                   </Button>
                 )}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleClosePanel}
-                  className="h-8 w-8"
-                >
+                <Button variant="ghost" size="icon" onClick={handleClosePanel} className="h-8 w-8">
                   <X className="h-4 w-4" />
                 </Button>
               </div>
@@ -277,7 +370,11 @@ export default function TaskBoardPage() {
                     {isEditing ? (
                       <Input
                         value={editedTask?.title || ""}
-                        onChange={(e) => setEditedTask(prev => prev ? { ...prev, title: e.target.value } : null)}
+                        onChange={(e) =>
+                          setEditedTask((prev) =>
+                            prev ? { ...prev, title: e.target.value } : null,
+                          )
+                        }
                         className="h-9 text-sm"
                       />
                     ) : (
@@ -290,7 +387,11 @@ export default function TaskBoardPage() {
                     {isEditing ? (
                       <Textarea
                         value={editedTask?.description || ""}
-                        onChange={(e) => setEditedTask(prev => prev ? { ...prev, description: e.target.value } : null)}
+                        onChange={(e) =>
+                          setEditedTask((prev) =>
+                            prev ? { ...prev, description: e.target.value } : null,
+                          )
+                        }
                         className="text-sm min-h-[80px]"
                         placeholder="Add task description..."
                       />
@@ -305,8 +406,12 @@ export default function TaskBoardPage() {
                     <div>
                       <Label className="text-xs text-muted-foreground mb-1">Priority</Label>
                       <div className="flex items-center gap-2">
-                        <div className={`h-1.5 w-1.5 rounded-full ${PRIORITY_COLORS[selectedTask.priority]}`} />
-                        <span className="text-sm text-foreground capitalize">{selectedTask.priority}</span>
+                        <div
+                          className={`h-1.5 w-1.5 rounded-full ${PRIORITY_COLORS[selectedTask.priority]}`}
+                        />
+                        <span className="text-sm text-foreground capitalize">
+                          {selectedTask.priority}
+                        </span>
                       </div>
                     </div>
 
@@ -316,7 +421,9 @@ export default function TaskBoardPage() {
                         {selectedTask.assignee ? (
                           <>
                             <Avatar className="h-5 w-5">
-                              <AvatarFallback className="text-[10px]">{selectedTask.assignee}</AvatarFallback>
+                              <AvatarFallback className="text-[10px]">
+                                {selectedTask.assignee}
+                              </AvatarFallback>
                             </Avatar>
                             <span className="text-sm text-foreground">{selectedTask.assignee}</span>
                           </>
@@ -389,7 +496,9 @@ export default function TaskBoardPage() {
                         </Avatar>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="text-xs font-medium text-foreground">{comment.author}</span>
+                            <span className="text-xs font-medium text-foreground">
+                              {comment.author}
+                            </span>
                             {comment.isAI && (
                               <span className="text-[10px] text-muted-foreground/60">AI</span>
                             )}
@@ -397,7 +506,9 @@ export default function TaskBoardPage() {
                               {new Date(comment.timestamp).toLocaleString()}
                             </span>
                           </div>
-                          <p className="text-xs text-foreground leading-relaxed">{comment.content}</p>
+                          <p className="text-xs text-foreground leading-relaxed">
+                            {comment.content}
+                          </p>
                         </div>
                       </div>
                     ))}
@@ -407,15 +518,11 @@ export default function TaskBoardPage() {
                     <Input
                       value={commentInput}
                       onChange={(e) => setCommentInput(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleAddComment()}
+                      onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleAddComment()}
                       placeholder="Add a comment..."
                       className="h-9 text-xs flex-1"
                     />
-                    <Button
-                      size="icon"
-                      onClick={handleAddComment}
-                      className="h-9 w-9"
-                    >
+                    <Button size="icon" onClick={handleAddComment} className="h-9 w-9">
                       <Send className="h-3.5 w-3.5" />
                     </Button>
                   </div>

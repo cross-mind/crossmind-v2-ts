@@ -6,9 +6,7 @@ import { ChatPage } from "../pages/chat";
 
 test.describe
   .serial("Guest Session", () => {
-    test("Authenticate as guest user when a new session is loaded", async ({
-      page,
-    }) => {
+    test("Authenticate as guest user when a new session is loaded", async ({ page }) => {
       const response = await page.goto("/");
 
       if (!response) {
@@ -166,9 +164,7 @@ test.describe
       await expect(authMenuItem).toContainText("Sign out");
     });
 
-    test("Do not navigate to /register for non-guest users", async ({
-      page,
-    }) => {
+    test("Do not navigate to /register for non-guest users", async ({ page }) => {
       await authPage.login(testUser.email, testUser.password);
       await page.waitForURL("/");
 
@@ -202,8 +198,6 @@ test.describe("Entitlements", () => {
     }
 
     await chatPage.sendUserMessage("Why is the sky blue?");
-    await chatPage.expectToastToContain(
-      getMessageByErrorCode("rate_limit:chat")
-    );
+    await chatPage.expectToastToContain(getMessageByErrorCode("rate_limit:chat"));
   });
 });

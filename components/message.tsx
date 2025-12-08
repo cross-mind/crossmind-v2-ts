@@ -10,13 +10,7 @@ import { DocumentToolResult } from "./document";
 import { DocumentPreview } from "./document-preview";
 import { MessageContent } from "./elements/message";
 import { Response } from "./elements/response";
-import {
-  Tool,
-  ToolContent,
-  ToolHeader,
-  ToolInput,
-  ToolOutput,
-} from "./elements/tool";
+import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from "./elements/tool";
 import { SparklesIcon } from "./icons";
 import { MessageActions } from "./message-actions";
 import { MessageEditor } from "./message-editor";
@@ -45,9 +39,7 @@ const PurePreviewMessage = ({
 }) => {
   const [mode, setMode] = useState<"view" | "edit">("view");
 
-  const attachmentsFromMessage = message.parts.filter(
-    (part) => part.type === "file"
-  );
+  const attachmentsFromMessage = message.parts.filter((part) => part.type === "file");
 
   useDataStream();
 
@@ -71,24 +63,17 @@ const PurePreviewMessage = ({
 
         <div
           className={cn("flex flex-col", {
-            "gap-2 md:gap-4": message.parts?.some(
-              (p) => p.type === "text" && p.text?.trim()
-            ),
+            "gap-2 md:gap-4": message.parts?.some((p) => p.type === "text" && p.text?.trim()),
             "w-full":
               (message.role === "assistant" &&
-                message.parts?.some(
-                  (p) => p.type === "text" && p.text?.trim()
-                )) ||
+                message.parts?.some((p) => p.type === "text" && p.text?.trim())) ||
               mode === "edit",
             "max-w-[calc(100%-2.5rem)] sm:max-w-[min(fit-content,80%)]":
               message.role === "user" && mode !== "edit",
           })}
         >
           {attachmentsFromMessage.length > 0 && (
-            <div
-              className="flex flex-row justify-end gap-2"
-              data-testid={"message-attachments"}
-            >
+            <div className="flex flex-row justify-end gap-2" data-testid={"message-attachments"}>
               {attachmentsFromMessage.map((attachment) => (
                 <PreviewAttachment
                   attachment={{
@@ -107,13 +92,7 @@ const PurePreviewMessage = ({
             const key = `message-${message.id}-part-${index}`;
 
             if (type === "reasoning" && part.text?.trim().length > 0) {
-              return (
-                <MessageReasoning
-                  isLoading={isLoading}
-                  key={key}
-                  reasoning={part.text}
-                />
-              );
+              return <MessageReasoning isLoading={isLoading} key={key} reasoning={part.text} />;
             }
 
             if (type === "text") {
@@ -124,15 +103,10 @@ const PurePreviewMessage = ({
                       className={cn({
                         "w-fit break-words rounded-2xl px-3 py-2 text-right text-white":
                           message.role === "user",
-                        "bg-transparent px-0 py-0 text-left":
-                          message.role === "assistant",
+                        "bg-transparent px-0 py-0 text-left": message.role === "assistant",
                       })}
                       data-testid="message-content"
-                      style={
-                        message.role === "user"
-                          ? { backgroundColor: "#006cff" }
-                          : undefined
-                      }
+                      style={message.role === "user" ? { backgroundColor: "#006cff" } : undefined}
                     >
                       <Response>{sanitizeText(part.text)}</Response>
                     </MessageContent>
@@ -142,10 +116,7 @@ const PurePreviewMessage = ({
 
               if (mode === "edit") {
                 return (
-                  <div
-                    className="flex w-full flex-row items-start gap-3"
-                    key={key}
-                  >
+                  <div className="flex w-full flex-row items-start gap-3" key={key}>
                     <div className="size-8" />
                     <div className="min-w-0 flex-1">
                       <MessageEditor
@@ -168,9 +139,7 @@ const PurePreviewMessage = ({
                 <Tool defaultOpen={true} key={toolCallId}>
                   <ToolHeader state={state} type="tool-getWeather" />
                   <ToolContent>
-                    {state === "input-available" && (
-                      <ToolInput input={part.input} />
-                    )}
+                    {state === "input-available" && <ToolInput input={part.input} />}
                     {state === "output-available" && (
                       <ToolOutput
                         errorText={undefined}
@@ -197,11 +166,7 @@ const PurePreviewMessage = ({
               }
 
               return (
-                <DocumentPreview
-                  isReadonly={isReadonly}
-                  key={toolCallId}
-                  result={part.output}
-                />
+                <DocumentPreview isReadonly={isReadonly} key={toolCallId} result={part.output} />
               );
             }
 
@@ -237,9 +202,7 @@ const PurePreviewMessage = ({
                 <Tool defaultOpen={true} key={toolCallId}>
                   <ToolHeader state={state} type="tool-requestSuggestions" />
                   <ToolContent>
-                    {state === "input-available" && (
-                      <ToolInput input={part.input} />
-                    )}
+                    {state === "input-available" && <ToolInput input={part.input} />}
                     {state === "output-available" && (
                       <ToolOutput
                         errorText={undefined}
@@ -282,28 +245,25 @@ const PurePreviewMessage = ({
   );
 };
 
-export const PreviewMessage = memo(
-  PurePreviewMessage,
-  (prevProps, nextProps) => {
-    if (prevProps.isLoading !== nextProps.isLoading) {
-      return false;
-    }
-    if (prevProps.message.id !== nextProps.message.id) {
-      return false;
-    }
-    if (prevProps.requiresScrollPadding !== nextProps.requiresScrollPadding) {
-      return false;
-    }
-    if (!equal(prevProps.message.parts, nextProps.message.parts)) {
-      return false;
-    }
-    if (!equal(prevProps.vote, nextProps.vote)) {
-      return false;
-    }
-
+export const PreviewMessage = memo(PurePreviewMessage, (prevProps, nextProps) => {
+  if (prevProps.isLoading !== nextProps.isLoading) {
     return false;
   }
-);
+  if (prevProps.message.id !== nextProps.message.id) {
+    return false;
+  }
+  if (prevProps.requiresScrollPadding !== nextProps.requiresScrollPadding) {
+    return false;
+  }
+  if (!equal(prevProps.message.parts, nextProps.message.parts)) {
+    return false;
+  }
+  if (!equal(prevProps.vote, nextProps.vote)) {
+    return false;
+  }
+
+  return false;
+});
 
 export const ThinkingMessage = () => {
   return (

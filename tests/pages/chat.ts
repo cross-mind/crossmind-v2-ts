@@ -49,7 +49,7 @@ export class ChatPage {
 
   async isGenerationComplete() {
     const response = await this.page.waitForResponse((currentResponse) =>
-      currentResponse.url().includes("/api/chat")
+      currentResponse.url().includes("/api/chat"),
     );
 
     await response.finished();
@@ -57,7 +57,7 @@ export class ChatPage {
 
   async isVoteComplete() {
     const response = await this.page.waitForResponse((currentResponse) =>
-      currentResponse.url().includes("/api/vote")
+      currentResponse.url().includes("/api/vote"),
     );
 
     await response.finished();
@@ -68,9 +68,7 @@ export class ChatPage {
   }
 
   async sendUserMessageFromSuggestion() {
-    await this.page
-      .getByRole("button", { name: "What are the advantages of" })
-      .click();
+    await this.page.getByRole("button", { name: "What are the advantages of" }).click();
   }
 
   async isElementVisible(elementId: string) {
@@ -87,7 +85,7 @@ export class ChatPage {
         process.cwd(),
         "public",
         "images",
-        "mouth of the seine, monet.jpg"
+        "mouth of the seine, monet.jpg",
       );
       const imageBuffer = fs.readFileSync(filePath);
 
@@ -107,9 +105,7 @@ export class ChatPage {
   }
 
   async chooseModelFromSelector(chatModelId: string) {
-    const chatModel = chatModels.find(
-      (currentChatModel) => currentChatModel.id === chatModelId
-    );
+    const chatModel = chatModels.find((currentChatModel) => currentChatModel.id === chatModelId);
 
     if (!chatModel) {
       throw new Error(`Model with id ${chatModelId} not found`);
@@ -121,24 +117,18 @@ export class ChatPage {
   }
 
   async getSelectedVisibility() {
-    const visibilityId = await this.page
-      .getByTestId("visibility-selector")
-      .innerText();
+    const visibilityId = await this.page.getByTestId("visibility-selector").innerText();
     return visibilityId;
   }
 
   async chooseVisibilityFromSelector(chatVisibility: "public" | "private") {
     await this.page.getByTestId("visibility-selector").click();
-    await this.page
-      .getByTestId(`visibility-selector-item-${chatVisibility}`)
-      .click();
+    await this.page.getByTestId(`visibility-selector-item-${chatVisibility}`).click();
     expect(await this.getSelectedVisibility()).toBe(chatVisibility);
   }
 
   async getRecentAssistantMessage() {
-    const messageElements = await this.page
-      .getByTestId("message-assistant")
-      .all();
+    const messageElements = await this.page.getByTestId("message-assistant").all();
     const lastMessageElement = messageElements.at(-1);
 
     if (!lastMessageElement) {
@@ -154,11 +144,7 @@ export class ChatPage {
       .getByTestId("message-reasoning")
       .isVisible()
       .then(async (visible) =>
-        visible
-          ? await lastMessageElement
-              .getByTestId("message-reasoning")
-              .innerText()
-          : null
+        visible ? await lastMessageElement.getByTestId("message-reasoning").innerText() : null,
       )
       .catch(() => null);
 
@@ -167,9 +153,7 @@ export class ChatPage {
       content,
       reasoning: reasoningElement,
       async toggleReasoningVisibility() {
-        await lastMessageElement
-          .getByTestId("message-reasoning-toggle")
-          .click();
+        await lastMessageElement.getByTestId("message-reasoning-toggle").click();
       },
       async upvote() {
         await lastMessageElement.getByTestId("message-upvote").click();
@@ -212,9 +196,7 @@ export class ChatPage {
         await page.getByTestId("message-edit-button").click();
         await page.getByTestId("message-editor").fill(newMessage);
         await page.getByTestId("message-editor-send-button").click();
-        await expect(
-          page.getByTestId("message-editor-send-button")
-        ).not.toBeVisible();
+        await expect(page.getByTestId("message-editor-send-button")).not.toBeVisible();
       },
     };
   }
@@ -230,7 +212,7 @@ export class ChatPage {
 
   isScrolledToBottom(): Promise<boolean> {
     return this.scrollContainer.evaluate(
-      (el) => Math.abs(el.scrollHeight - el.scrollTop - el.clientHeight) < 1
+      (el) => Math.abs(el.scrollHeight - el.scrollTop - el.clientHeight) < 1,
     );
   }
 
@@ -247,10 +229,7 @@ export class ChatPage {
     throw new Error(`Timed out waiting for scroll bottom after ${timeout}ms`);
   }
 
-  async sendMultipleMessages(
-    count: number,
-    makeMessage: (i: number) => string
-  ) {
+  async sendMultipleMessages(count: number, makeMessage: (i: number) => string) {
     for (let i = 0; i < count; i++) {
       await this.sendUserMessage(makeMessage(i));
       await this.isGenerationComplete();

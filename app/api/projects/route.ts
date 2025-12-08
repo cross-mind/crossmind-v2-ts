@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/app/(auth)/auth";
-import { getProjectsByUserId, createProject } from "@/lib/db/queries";
-import type { Project } from "@/lib/db/schema";
 
 export async function GET() {
   const session = await auth();
@@ -16,10 +14,7 @@ export async function GET() {
     return NextResponse.json({ projects: [], message: "Projects API - GET (not yet implemented)" });
   } catch (error) {
     console.error("Error fetching projects:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch projects" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to fetch projects" }, { status: 500 });
   }
 }
 
@@ -39,9 +34,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "Projects API - POST (not yet implemented)" });
   } catch (error) {
     console.error("Error creating project:", error);
-    return NextResponse.json(
-      { error: "Failed to create project" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to create project" }, { status: 500 });
   }
 }

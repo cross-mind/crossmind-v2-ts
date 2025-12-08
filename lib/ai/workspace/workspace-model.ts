@@ -18,9 +18,7 @@ interface WorkspaceModelOptions {
  * - Workspace Container runs agent code in isolated environment
  * - Custom provider bridges the two layers
  */
-export function createWorkspaceModel(
-  options: WorkspaceModelOptions
-): LanguageModelV1 {
+export function createWorkspaceModel(options: WorkspaceModelOptions): LanguageModelV1 {
   const { projectId, containerId } = options;
 
   // TODO: Implement the actual workspace model provider
@@ -33,7 +31,7 @@ export function createWorkspaceModel(
   // 6. Stream responses back
 
   throw new Error(
-    "Workspace model not yet implemented. This requires setting up the Workspace Container infrastructure."
+    "Workspace model not yet implemented. This requires setting up the Workspace Container infrastructure.",
   );
 }
 
@@ -42,7 +40,7 @@ export function createWorkspaceModel(
  * Handles lifecycle of workspace containers
  */
 export class WorkspaceManager {
-  async getOrCreate(projectId: string): Promise<WorkspaceContainer> {
+  async getOrCreate(_projectId: string): Promise<WorkspaceContainer> {
     // TODO: Implement container management
     // - Check if container exists for project
     // - Create new container if needed
@@ -50,7 +48,7 @@ export class WorkspaceManager {
     throw new Error("Not implemented");
   }
 
-  async destroy(projectId: string): Promise<void> {
+  async destroy(_projectId: string): Promise<void> {
     // TODO: Implement container cleanup
     throw new Error("Not implemented");
   }

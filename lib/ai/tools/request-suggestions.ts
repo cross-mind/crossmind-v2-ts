@@ -12,16 +12,11 @@ type RequestSuggestionsProps = {
   dataStream: UIMessageStreamWriter<ChatMessage>;
 };
 
-export const requestSuggestions = ({
-  session,
-  dataStream,
-}: RequestSuggestionsProps) =>
+export const requestSuggestions = ({ session, dataStream }: RequestSuggestionsProps) =>
   tool({
     description: "Request suggestions for a document",
     inputSchema: z.object({
-      documentId: z
-        .string()
-        .describe("The ID of the document to request edits"),
+      documentId: z.string().describe("The ID of the document to request edits"),
     }),
     execute: async ({ documentId }) => {
       const document = await getDocumentById({ id: documentId });
@@ -32,10 +27,7 @@ export const requestSuggestions = ({
         };
       }
 
-      const suggestions: Omit<
-        Suggestion,
-        "userId" | "createdAt" | "documentCreatedAt"
-      >[] = [];
+      const suggestions: Omit<Suggestion, "userId" | "createdAt" | "documentCreatedAt">[] = [];
 
       const { elementStream } = streamObject({
         model: myProvider.languageModel("artifact-model"),

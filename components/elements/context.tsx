@@ -90,9 +90,7 @@ function InfoRow({
         {costText !== undefined &&
           costText !== null &&
           !Number.isNaN(Number.parseFloat(costText)) && (
-            <span className="text-muted-foreground">
-              ${Number.parseFloat(costText).toFixed(6)}
-            </span>
+            <span className="text-muted-foreground">${Number.parseFloat(costText).toFixed(6)}</span>
           )}
       </div>
     </div>
@@ -101,10 +99,7 @@ function InfoRow({
 
 export const Context = ({ className, usage, ...props }: ContextProps) => {
   const used = usage?.totalTokens ?? 0;
-  const max =
-    usage?.context?.totalMax ??
-    usage?.context?.combinedMax ??
-    usage?.context?.inputMax;
+  const max = usage?.context?.totalMax ?? usage?.context?.combinedMax ?? usage?.context?.inputMax;
   const hasMax = typeof max === "number" && Number.isFinite(max) && max > 0;
   const usedPercent = hasMax ? Math.min(100, (used / max) * 100) : 0;
   return (
@@ -115,7 +110,7 @@ export const Context = ({ className, usage, ...props }: ContextProps) => {
             "inline-flex select-none items-center gap-1 rounded-md text-sm",
             "cursor-pointer bg-background text-foreground",
             "outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-            className
+            className,
           )}
           type="button"
           {...props}
@@ -172,9 +167,7 @@ export const Context = ({ className, usage, ...props }: ContextProps) => {
                   <div className="flex items-center gap-2 font-mono">
                     <span className="min-w-[4ch] text-right" />
                     <span>
-                      {Number.isNaN(
-                        Number.parseFloat(usage.costUSD.totalUSD.toString())
-                      )
+                      {Number.isNaN(Number.parseFloat(usage.costUSD.totalUSD.toString()))
                         ? "—"
                         : `$${Number.parseFloat(usage.costUSD.totalUSD.toString()).toFixed(6)}`}
                     </span>

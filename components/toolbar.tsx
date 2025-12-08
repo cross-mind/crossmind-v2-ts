@@ -1,12 +1,7 @@
 "use client";
 import type { UseChatHelpers } from "@ai-sdk/react";
 import cx from "classnames";
-import {
-  AnimatePresence,
-  motion,
-  useMotionValue,
-  useTransform,
-} from "framer-motion";
+import { AnimatePresence, motion, useMotionValue, useTransform } from "framer-motion";
 import { nanoid } from "nanoid";
 import {
   type Dispatch,
@@ -18,12 +13,7 @@ import {
   useState,
 } from "react";
 import { useOnClickOutside } from "usehooks-ts";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ChatMessage } from "@/lib/types";
 import { type ArtifactKind, artifactDefinitions } from "./artifact";
 import type { ArtifactToolbarItem } from "./create-artifact";
@@ -38,11 +28,7 @@ type ToolProps = {
   setIsToolbarVisible?: Dispatch<SetStateAction<boolean>>;
   isAnimating: boolean;
   sendMessage: UseChatHelpers<ChatMessage>["sendMessage"];
-  onClick: ({
-    sendMessage,
-  }: {
-    sendMessage: UseChatHelpers<ChatMessage>["sendMessage"];
-  }) => void;
+  onClick: ({ sendMessage }: { sendMessage: UseChatHelpers<ChatMessage>["sendMessage"] }) => void;
 };
 
 const Tool = ({
@@ -156,8 +142,7 @@ const ReadingLevelSelector = ({
   const yToLevel = useTransform(y, [0, -dragConstraints], [0, 5]);
 
   const [currentLevel, setCurrentLevel] = useState(2);
-  const [hasUserSelectedLevel, setHasUserSelectedLevel] =
-    useState<boolean>(false);
+  const [hasUserSelectedLevel, setHasUserSelectedLevel] = useState<boolean>(false);
 
   useEffect(() => {
     const unsubscribe = yToLevel.on("change", (latest) => {
@@ -192,7 +177,7 @@ const ReadingLevelSelector = ({
                 {
                   "bg-primary text-primary-foreground": currentLevel !== 2,
                   "bg-background text-foreground": currentLevel === 2,
-                }
+                },
               )}
               drag="y"
               dragConstraints={{ top: -dragConstraints, bottom: 0 }}
@@ -361,7 +346,7 @@ const PureToolbar = ({
   }, [status, setIsToolbarVisible]);
 
   const artifactDefinition = artifactDefinitions.find(
-    (definition) => definition.kind === artifactKind
+    (definition) => definition.kind === artifactKind,
   );
 
   if (!artifactDefinition) {

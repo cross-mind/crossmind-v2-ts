@@ -44,9 +44,7 @@ export const VersionFooter = ({
     >
       <div>
         <div>You are viewing a previous version</div>
-        <div className="text-muted-foreground text-sm">
-          Restore this version to make edits
-        </div>
+        <div className="text-muted-foreground text-sm">Restore this version to make edits</div>
       </div>
 
       <div className="flex flex-row gap-4">
@@ -60,11 +58,11 @@ export const VersionFooter = ({
               await fetch(
                 `/api/document?id=${artifact.documentId}&timestamp=${getDocumentTimestampByIndex(
                   documents,
-                  currentVersionIndex
+                  currentVersionIndex,
                 )}`,
                 {
                   method: "DELETE",
-                }
+                },
               ),
               {
                 optimisticData: documents
@@ -72,17 +70,12 @@ export const VersionFooter = ({
                       ...documents.filter((document) =>
                         isAfter(
                           new Date(document.createdAt),
-                          new Date(
-                            getDocumentTimestampByIndex(
-                              documents,
-                              currentVersionIndex
-                            )
-                          )
-                        )
+                          new Date(getDocumentTimestampByIndex(documents, currentVersionIndex)),
+                        ),
                       ),
                     ]
                   : [],
-              }
+              },
             );
           }}
         >

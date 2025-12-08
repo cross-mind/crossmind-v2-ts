@@ -22,17 +22,10 @@ export type MessageEditorProps = {
   regenerate: UseChatHelpers<ChatMessage>["regenerate"];
 };
 
-export function MessageEditor({
-  message,
-  setMode,
-  setMessages,
-  regenerate,
-}: MessageEditorProps) {
+export function MessageEditor({ message, setMode, setMessages, regenerate }: MessageEditorProps) {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-  const [draftContent, setDraftContent] = useState<string>(
-    getTextFromMessage(message)
-  );
+  const [draftContent, setDraftContent] = useState<string>(getTextFromMessage(message));
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const adjustHeight = useCallback(() => {

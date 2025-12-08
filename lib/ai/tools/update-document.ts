@@ -15,9 +15,7 @@ export const updateDocument = ({ session, dataStream }: UpdateDocumentProps) =>
     description: "Update a document with the given description.",
     inputSchema: z.object({
       id: z.string().describe("The ID of the document to update"),
-      description: z
-        .string()
-        .describe("The description of changes that need to be made"),
+      description: z.string().describe("The description of changes that need to be made"),
     }),
     execute: async ({ id, description }) => {
       const document = await getDocumentById({ id });
@@ -35,8 +33,7 @@ export const updateDocument = ({ session, dataStream }: UpdateDocumentProps) =>
       });
 
       const documentHandler = documentHandlersByArtifactKind.find(
-        (documentHandlerByArtifactKind) =>
-          documentHandlerByArtifactKind.kind === document.kind
+        (documentHandlerByArtifactKind) => documentHandlerByArtifactKind.kind === document.kind,
       );
 
       if (!documentHandler) {

@@ -1,26 +1,26 @@
 "use client";
 
+import {
+  CheckCircle,
+  CheckCircle2,
+  ChevronDown,
+  Code2,
+  ExternalLink,
+  GitBranch,
+  Github,
+  Globe,
+  Lock,
+  Plus,
+  RefreshCw,
+  Settings,
+} from "lucide-react";
 import { useState } from "react";
+import { SidebarToggle } from "@/components/sidebar-toggle";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { SidebarToggle } from "@/components/sidebar-toggle";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import {
-  Github,
-  Code2,
-  Settings,
-  ExternalLink,
-  RefreshCw,
-  CheckCircle2,
-  GitBranch,
-  ChevronDown,
-  Plus,
-  Lock,
-  Globe,
-  CheckCircle
-} from "lucide-react";
 
 interface GitHubRepo {
   id: string;
@@ -40,8 +40,8 @@ const MOCK_REPOS: GitHubRepo[] = [
     private: false,
     description: "CrossMind MVP - Product incubation platform",
     url: "https://github.com/ivan/crossmind-mvp",
-    createdAt: "2024-12-01T10:00:00"
-  }
+    createdAt: "2024-12-01T10:00:00",
+  },
 ];
 
 export default function DevDashboardPage() {
@@ -61,7 +61,7 @@ export default function DevDashboardPage() {
       private: newRepoPrivate,
       description: newRepoDesc,
       url: `https://github.com/ivan/${newRepoName}`,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
     };
     setRepos([...repos, newRepo]);
     setNewRepoName("");
@@ -149,7 +149,10 @@ export default function DevDashboardPage() {
                   </div>
                   <div className="space-y-2">
                     {repos.map((repo) => (
-                      <div key={repo.id} className="flex items-center gap-3 p-3 border rounded-lg bg-background hover:bg-muted/40 transition-colors">
+                      <div
+                        key={repo.id}
+                        className="flex items-center gap-3 p-3 border rounded-lg bg-background hover:bg-muted/40 transition-colors"
+                      >
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
                             {repo.private ? (
@@ -157,16 +160,20 @@ export default function DevDashboardPage() {
                             ) : (
                               <Globe className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                             )}
-                            <span className="text-sm font-medium text-foreground truncate">{repo.fullName}</span>
+                            <span className="text-sm font-medium text-foreground truncate">
+                              {repo.fullName}
+                            </span>
                           </div>
                           {repo.description && (
-                            <p className="text-xs text-muted-foreground line-clamp-1">{repo.description}</p>
+                            <p className="text-xs text-muted-foreground line-clamp-1">
+                              {repo.description}
+                            </p>
                           )}
                         </div>
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => window.open(repo.url, '_blank')}
+                          onClick={() => window.open(repo.url, "_blank")}
                           className="h-7 w-7"
                         >
                           <ExternalLink className="h-3.5 w-3.5" />
@@ -219,11 +226,7 @@ export default function DevDashboardPage() {
                       >
                         Cancel
                       </Button>
-                      <Button
-                        size="sm"
-                        onClick={handleCreateRepo}
-                        className="flex-1 h-8 text-xs"
-                      >
+                      <Button size="sm" onClick={handleCreateRepo} className="flex-1 h-8 text-xs">
                         <CheckCircle className="h-3.5 w-3.5 mr-1.5" />
                         Create
                       </Button>
@@ -270,13 +273,46 @@ export default function DevDashboardPage() {
             <div className="flex-1 overflow-auto">
               <div className="divide-y divide-border/50">
                 {[
-                  { name: "Deploy to Production", status: "success", branch: "main", time: "10m ago", duration: "2m 14s" },
-                  { name: "Run Tests", status: "success", branch: "main", time: "2h ago", duration: "45s" },
-                  { name: "AI Code Review", status: "running", branch: "develop", time: "Just now", duration: "Running..." },
-                  { name: "Build Docker Image", status: "success", branch: "main", time: "3h ago", duration: "1m 32s" },
-                  { name: "Lint & Format", status: "success", branch: "feature/ui", time: "5h ago", duration: "12s" },
+                  {
+                    name: "Deploy to Production",
+                    status: "success",
+                    branch: "main",
+                    time: "10m ago",
+                    duration: "2m 14s",
+                  },
+                  {
+                    name: "Run Tests",
+                    status: "success",
+                    branch: "main",
+                    time: "2h ago",
+                    duration: "45s",
+                  },
+                  {
+                    name: "AI Code Review",
+                    status: "running",
+                    branch: "develop",
+                    time: "Just now",
+                    duration: "Running...",
+                  },
+                  {
+                    name: "Build Docker Image",
+                    status: "success",
+                    branch: "main",
+                    time: "3h ago",
+                    duration: "1m 32s",
+                  },
+                  {
+                    name: "Lint & Format",
+                    status: "success",
+                    branch: "feature/ui",
+                    time: "5h ago",
+                    duration: "12s",
+                  },
                 ].map((workflow, i) => (
-                  <div key={i} className="group flex items-center gap-4 px-6 py-3 hover:bg-muted/40 cursor-pointer transition-colors">
+                  <div
+                    key={i}
+                    className="group flex items-center gap-4 px-6 py-3 hover:bg-muted/40 cursor-pointer transition-colors"
+                  >
                     {/* Column 1: Status + Name */}
                     <div className="flex items-center gap-2 flex-1 min-w-0">
                       {workflow.status === "success" ? (
@@ -334,11 +370,21 @@ export default function DevDashboardPage() {
               <label className="text-xs text-muted-foreground">Permissions</label>
               <div className="space-y-2 p-3 border rounded-lg bg-background">
                 <div className="flex items-center gap-2 text-xs">
-                  <input type="checkbox" checked readOnly className="rounded text-primary h-3.5 w-3.5" />
+                  <input
+                    type="checkbox"
+                    checked
+                    readOnly
+                    className="rounded text-primary h-3.5 w-3.5"
+                  />
                   <span>Read Repo</span>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
-                  <input type="checkbox" checked readOnly className="rounded text-primary h-3.5 w-3.5" />
+                  <input
+                    type="checkbox"
+                    checked
+                    readOnly
+                    className="rounded text-primary h-3.5 w-3.5"
+                  />
                   <span>Create PRs</span>
                 </div>
               </div>

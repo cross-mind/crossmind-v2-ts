@@ -51,15 +51,9 @@ function PureArtifactMessages({
           key={message.id}
           message={message}
           regenerate={regenerate}
-          requiresScrollPadding={
-            hasSentMessage && index === messages.length - 1
-          }
+          requiresScrollPadding={hasSentMessage && index === messages.length - 1}
           setMessages={setMessages}
-          vote={
-            votes
-              ? votes.find((vote) => vote.messageId === message.id)
-              : undefined
-          }
+          vote={votes ? votes.find((vote) => vote.messageId === message.id) : undefined}
         />
       ))}
 
@@ -77,14 +71,8 @@ function PureArtifactMessages({
   );
 }
 
-function areEqual(
-  prevProps: ArtifactMessagesProps,
-  nextProps: ArtifactMessagesProps
-) {
-  if (
-    prevProps.artifactStatus === "streaming" &&
-    nextProps.artifactStatus === "streaming"
-  ) {
+function areEqual(prevProps: ArtifactMessagesProps, nextProps: ArtifactMessagesProps) {
+  if (prevProps.artifactStatus === "streaming" && nextProps.artifactStatus === "streaming") {
     return true;
   }
 

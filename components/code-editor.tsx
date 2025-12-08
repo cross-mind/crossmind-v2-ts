@@ -48,9 +48,7 @@ function PureCodeEditor({ content, onSaveContent, status }: EditorProps) {
     if (editorRef.current) {
       const updateListener = EditorView.updateListener.of((update) => {
         if (update.docChanged) {
-          const transaction = update.transactions.find(
-            (tr) => !tr.annotation(Transaction.remote)
-          );
+          const transaction = update.transactions.find((tr) => !tr.annotation(Transaction.remote));
 
           if (transaction) {
             const newContent = update.state.doc.toString();
@@ -90,12 +88,7 @@ function PureCodeEditor({ content, onSaveContent, status }: EditorProps) {
     }
   }, [content, status]);
 
-  return (
-    <div
-      className="not-prose relative w-full pb-[calc(80dvh)] text-sm"
-      ref={containerRef}
-    />
-  );
+  return <div className="not-prose relative w-full pb-[calc(80dvh)] text-sm" ref={containerRef} />;
 }
 
 function areEqual(prevProps: EditorProps, nextProps: EditorProps) {

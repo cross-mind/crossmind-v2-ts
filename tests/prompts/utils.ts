@@ -2,18 +2,12 @@ import type { LanguageModelV2StreamPart } from "@ai-sdk/provider";
 import { generateId, type ModelMessage } from "ai";
 import { TEST_PROMPTS } from "./basic";
 
-export function compareMessages(
-  firstMessage: ModelMessage,
-  secondMessage: ModelMessage
-): boolean {
+export function compareMessages(firstMessage: ModelMessage, secondMessage: ModelMessage): boolean {
   if (firstMessage.role !== secondMessage.role) {
     return false;
   }
 
-  if (
-    !Array.isArray(firstMessage.content) ||
-    !Array.isArray(secondMessage.content)
-  ) {
+  if (!Array.isArray(firstMessage.content) || !Array.isArray(secondMessage.content)) {
     return false;
   }
 
@@ -69,16 +63,12 @@ const reasoningToDeltas = (text: string): LanguageModelV2StreamPart[] => {
     delta: `${char} `,
   }));
 
-  return [
-    { id, type: "reasoning-start" },
-    ...deltas,
-    { id, type: "reasoning-end" },
-  ];
+  return [{ id, type: "reasoning-start" }, ...deltas, { id, type: "reasoning-end" }];
 };
 
 export const getResponseChunksByPrompt = (
   prompt: ModelMessage[],
-  isReasoningEnabled = false
+  isReasoningEnabled = false,
 ): LanguageModelV2StreamPart[] => {
   const recentMessage = prompt.at(-1);
 
@@ -101,9 +91,7 @@ export const getResponseChunksByPrompt = (
 
     if (compareMessages(recentMessage, TEST_PROMPTS.USER_GRASS)) {
       return [
-        ...reasoningToDeltas(
-          "Grass is green because of chlorophyll absorption!"
-        ),
+        ...reasoningToDeltas("Grass is green because of chlorophyll absorption!"),
         ...textToDeltas("It's just green duh!"),
         {
           type: "finish",
@@ -238,9 +226,7 @@ As we move forward, Silicon Valley continues to reinvent itself. While some pred
     ];
   }
 
-  if (
-    compareMessages(recentMessage, TEST_PROMPTS.CREATE_DOCUMENT_TEXT_RESULT)
-  ) {
+  if (compareMessages(recentMessage, TEST_PROMPTS.CREATE_DOCUMENT_TEXT_RESULT)) {
     return [
       ...textToDeltas("A document was created and is now visible to the user."),
       {

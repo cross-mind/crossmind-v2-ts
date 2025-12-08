@@ -24,22 +24,18 @@ export function ModelSelector({
   selectedModelId: string;
 } & React.ComponentProps<typeof Button>) {
   const [open, setOpen] = useState(false);
-  const [optimisticModelId, setOptimisticModelId] =
-    useOptimistic(selectedModelId);
+  const [optimisticModelId, setOptimisticModelId] = useOptimistic(selectedModelId);
 
   const userType = session.user.type;
   const { availableChatModelIds } = entitlementsByUserType[userType];
 
   const availableChatModels = chatModels.filter((chatModel) =>
-    availableChatModelIds.includes(chatModel.id)
+    availableChatModelIds.includes(chatModel.id),
   );
 
   const selectedChatModel = useMemo(
-    () =>
-      availableChatModels.find(
-        (chatModel) => chatModel.id === optimisticModelId
-      ),
-    [optimisticModelId, availableChatModels]
+    () => availableChatModels.find((chatModel) => chatModel.id === optimisticModelId),
+    [optimisticModelId, availableChatModels],
   );
 
   return (
@@ -48,22 +44,15 @@ export function ModelSelector({
         asChild
         className={cn(
           "w-fit data-[state=open]:bg-accent data-[state=open]:text-accent-foreground",
-          className
+          className,
         )}
       >
-        <Button
-          className="md:h-[34px] md:px-2"
-          data-testid="model-selector"
-          variant="outline"
-        >
+        <Button className="md:h-[34px] md:px-2" data-testid="model-selector" variant="outline">
           {selectedChatModel?.name}
           <ChevronDownIcon />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent
-        align="start"
-        className="min-w-[280px] max-w-[90vw] sm:min-w-[300px]"
-      >
+      <DropdownMenuContent align="start" className="min-w-[280px] max-w-[90vw] sm:min-w-[300px]">
         {availableChatModels.map((chatModel) => {
           const { id } = chatModel;
 

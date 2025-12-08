@@ -34,13 +34,7 @@ import {
   PromptInputToolbar,
   PromptInputTools,
 } from "./elements/prompt-input";
-import {
-  ArrowUpIcon,
-  ChevronDownIcon,
-  CpuIcon,
-  PaperclipIcon,
-  StopIcon,
-} from "./icons";
+import { ArrowUpIcon, ChevronDownIcon, CpuIcon, PaperclipIcon, StopIcon } from "./icons";
 import { PreviewAttachment } from "./preview-attachment";
 import { SuggestedActions } from "./suggested-actions";
 import { Button } from "./ui/button";
@@ -100,10 +94,7 @@ function PureMultimodalInput({
     }
   }, []);
 
-  const [localStorageInput, setLocalStorageInput] = useLocalStorage(
-    "input",
-    ""
-  );
+  const [localStorageInput, setLocalStorageInput] = useLocalStorage("input", "");
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -198,7 +189,7 @@ function PureMultimodalInput({
     () => ({
       usage,
     }),
-    [usage]
+    [usage],
   );
 
   const handleFileChange = useCallback(
@@ -211,7 +202,7 @@ function PureMultimodalInput({
         const uploadPromises = files.map((file) => uploadFile(file));
         const uploadedAttachments = await Promise.all(uploadPromises);
         const successfullyUploadedAttachments = uploadedAttachments.filter(
-          (attachment) => attachment !== undefined
+          (attachment) => attachment !== undefined,
         );
 
         setAttachments((currentAttachments) => [
@@ -224,7 +215,7 @@ function PureMultimodalInput({
         setUploadQueue([]);
       }
     },
-    [setAttachments, uploadFile]
+    [setAttachments, uploadFile],
   );
 
   const handlePaste = useCallback(
@@ -234,9 +225,7 @@ function PureMultimodalInput({
         return;
       }
 
-      const imageItems = Array.from(items).filter((item) =>
-        item.type.startsWith("image/")
-      );
+      const imageItems = Array.from(items).filter((item) => item.type.startsWith("image/"));
 
       if (imageItems.length === 0) {
         return;
@@ -258,13 +247,10 @@ function PureMultimodalInput({
           (attachment) =>
             attachment !== undefined &&
             attachment.url !== undefined &&
-            attachment.contentType !== undefined
+            attachment.contentType !== undefined,
         );
 
-        setAttachments((curr) => [
-          ...curr,
-          ...(successfullyUploadedAttachments as Attachment[]),
-        ]);
+        setAttachments((curr) => [...curr, ...(successfullyUploadedAttachments as Attachment[])]);
       } catch (error) {
         console.error("Error uploading pasted images:", error);
         toast.error("Failed to upload pasted image(s)");
@@ -272,7 +258,7 @@ function PureMultimodalInput({
         setUploadQueue([]);
       }
     },
-    [setAttachments, uploadFile]
+    [setAttachments, uploadFile],
   );
 
   // Add paste event listener to textarea
@@ -288,15 +274,13 @@ function PureMultimodalInput({
 
   return (
     <div className={cn("relative flex w-full flex-col gap-4", className)}>
-      {messages.length === 0 &&
-        attachments.length === 0 &&
-        uploadQueue.length === 0 && (
-          <SuggestedActions
-            chatId={chatId}
-            selectedVisibilityType={selectedVisibilityType}
-            sendMessage={sendMessage}
-          />
-        )}
+      {messages.length === 0 && attachments.length === 0 && uploadQueue.length === 0 && (
+        <SuggestedActions
+          chatId={chatId}
+          selectedVisibilityType={selectedVisibilityType}
+          sendMessage={sendMessage}
+        />
+      )}
 
       <input
         className="-top-4 -left-4 pointer-events-none fixed size-0.5 opacity-0"
@@ -329,7 +313,7 @@ function PureMultimodalInput({
                 key={attachment.url}
                 onRemove={() => {
                   setAttachments((currentAttachments) =>
-                    currentAttachments.filter((a) => a.url !== attachment.url)
+                    currentAttachments.filter((a) => a.url !== attachment.url),
                   );
                   if (fileInputRef.current) {
                     fileInputRef.current.value = "";
@@ -374,10 +358,7 @@ function PureMultimodalInput({
               selectedModelId={selectedModelId}
               status={status}
             />
-            <ModelSelectorCompact
-              onModelChange={onModelChange}
-              selectedModelId={selectedModelId}
-            />
+            <ModelSelectorCompact onModelChange={onModelChange} selectedModelId={selectedModelId} />
           </PromptInputTools>
 
           {status === "submitted" ? (
@@ -398,28 +379,25 @@ function PureMultimodalInput({
   );
 }
 
-export const MultimodalInput = memo(
-  PureMultimodalInput,
-  (prevProps, nextProps) => {
-    if (prevProps.input !== nextProps.input) {
-      return false;
-    }
-    if (prevProps.status !== nextProps.status) {
-      return false;
-    }
-    if (!equal(prevProps.attachments, nextProps.attachments)) {
-      return false;
-    }
-    if (prevProps.selectedVisibilityType !== nextProps.selectedVisibilityType) {
-      return false;
-    }
-    if (prevProps.selectedModelId !== nextProps.selectedModelId) {
-      return false;
-    }
-
-    return true;
+export const MultimodalInput = memo(PureMultimodalInput, (prevProps, nextProps) => {
+  if (prevProps.input !== nextProps.input) {
+    return false;
   }
-);
+  if (prevProps.status !== nextProps.status) {
+    return false;
+  }
+  if (!equal(prevProps.attachments, nextProps.attachments)) {
+    return false;
+  }
+  if (prevProps.selectedVisibilityType !== nextProps.selectedVisibilityType) {
+    return false;
+  }
+  if (prevProps.selectedModelId !== nextProps.selectedModelId) {
+    return false;
+  }
+
+  return true;
+});
 
 function PureAttachmentsButton({
   fileInputRef,
@@ -463,9 +441,7 @@ function PureModelSelectorCompact({
     setOptimisticModelId(selectedModelId);
   }, [selectedModelId]);
 
-  const selectedModel = chatModels.find(
-    (model) => model.id === optimisticModelId
-  );
+  const selectedModel = chatModels.find((model) => model.id === optimisticModelId);
 
   return (
     <PromptInputModelSelect
@@ -484,9 +460,7 @@ function PureModelSelectorCompact({
       <Trigger asChild>
         <Button className="h-8 px-2" variant="ghost">
           <CpuIcon size={16} />
-          <span className="hidden font-medium text-xs sm:block">
-            {selectedModel?.name}
-          </span>
+          <span className="hidden font-medium text-xs sm:block">{selectedModel?.name}</span>
           <ChevronDownIcon size={16} />
         </Button>
       </Trigger>

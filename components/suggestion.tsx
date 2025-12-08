@@ -50,11 +50,7 @@ export const Suggestion = ({
             </button>
           </div>
           <div>{suggestion.description}</div>
-          <Button
-            className="w-fit rounded-full px-3 py-1.5"
-            onClick={onApply}
-            variant="outline"
-          >
+          <Button className="w-fit rounded-full px-3 py-1.5" onClick={onApply} variant="outline">
             Apply
           </Button>
         </motion.div>

@@ -1,5 +1,17 @@
 "use client";
 
+import {
+  Brain,
+  ChevronsUpDown,
+  Code2,
+  Command,
+  FolderOpen,
+  Layout,
+  MessageSquare,
+  Plus,
+  Settings,
+  Sparkles,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import type { User } from "next-auth";
@@ -7,21 +19,17 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { useSWRConfig } from "swr";
 import { unstable_serialize } from "swr/infinite";
-import {
-  Brain,
-  Code2,
-  Command,
-  Layout,
-  MessageSquare,
-  Plus,
-  Sparkles,
-  Settings,
-  FolderOpen,
-  ChevronsUpDown,
-} from "lucide-react";
 import { PlusIcon, TrashIcon } from "@/components/icons";
+import { getChatHistoryPaginationKey, SidebarHistory } from "@/components/sidebar-history";
 import { SidebarUserNav } from "@/components/sidebar-user-nav";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Sidebar,
   SidebarContent,
@@ -33,21 +41,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  useSidebar,
   SidebarRail,
+  useSidebar,
 } from "@/components/ui/sidebar";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
-import {
-  getChatHistoryPaginationKey,
-  SidebarHistory,
-} from "@/components/sidebar-history";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -59,6 +55,7 @@ import {
   AlertDialogTitle,
 } from "./ui/alert-dialog";
 import { Separator } from "./ui/separator";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 export function CrossMindSidebar({ user }: { user: User | undefined }) {
   const pathname = usePathname();
@@ -135,23 +132,25 @@ export function CrossMindSidebar({ user }: { user: User | undefined }) {
               <SidebarMenuItem className="flex-1">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <SidebarMenuButton
-                      className="w-full data-[state=open]:bg-accent"
-                      size="lg"
-                    >
+                    <SidebarMenuButton className="w-full data-[state=open]:bg-accent" size="lg">
                       <div className="flex items-center gap-3 flex-1 min-w-0">
                         <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shrink-0">
                           <Command className="size-4" />
                         </div>
                         <div className="flex flex-col items-start min-w-0 flex-1">
                           <span className="text-sm font-semibold leading-none">CrossMind</span>
-                          <span className="text-xs text-muted-foreground truncate w-full">{currentProject}</span>
+                          <span className="text-xs text-muted-foreground truncate w-full">
+                            {currentProject}
+                          </span>
                         </div>
                       </div>
                       <ChevronsUpDown className="size-4 shrink-0 opacity-50" />
                     </SidebarMenuButton>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="w-[--radix-dropdown-menu-trigger-width]">
+                  <DropdownMenuContent
+                    align="start"
+                    className="w-[--radix-dropdown-menu-trigger-width]"
+                  >
                     <DropdownMenuItem
                       className="gap-2 cursor-pointer"
                       onClick={() => setCurrentProject("CrossMind MVP")}
@@ -258,15 +257,8 @@ export function CrossMindSidebar({ user }: { user: User | undefined }) {
                     const isActive = pathname === item.href;
                     return (
                       <SidebarMenuItem key={item.title}>
-                        <SidebarMenuButton
-                          asChild
-                          isActive={isActive}
-                          tooltip={item.title}
-                        >
-                          <Link
-                            href={item.href}
-                            onClick={() => setOpenMobile(false)}
-                          >
+                        <SidebarMenuButton asChild isActive={isActive} tooltip={item.title}>
+                          <Link href={item.href} onClick={() => setOpenMobile(false)}>
                             <Icon className="h-4 w-4" />
                             <span>{item.title}</span>
                           </Link>
@@ -284,23 +276,18 @@ export function CrossMindSidebar({ user }: { user: User | undefined }) {
         <SidebarRail />
       </Sidebar>
 
-      <AlertDialog
-        onOpenChange={setShowDeleteAllDialog}
-        open={showDeleteAllDialog}
-      >
+      <AlertDialog onOpenChange={setShowDeleteAllDialog} open={showDeleteAllDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete all chats?</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently delete all
-              your chats and remove them from our servers.
+              This action cannot be undone. This will permanently delete all your chats and remove
+              them from our servers.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteAll}>
-              Delete All
-            </AlertDialogAction>
+            <AlertDialogAction onClick={handleDeleteAll}>Delete All</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -1,14 +1,7 @@
 "use client";
 
 import equal from "fast-deep-equal";
-import {
-  type MouseEvent,
-  memo,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-} from "react";
+import { type MouseEvent, memo, useCallback, useEffect, useMemo, useRef } from "react";
 import useSWR from "swr";
 import { useArtifact } from "@/hooks/use-artifact";
 import type { Document } from "@/lib/db/schema";
@@ -28,16 +21,13 @@ type DocumentPreviewProps = {
   args?: any;
 };
 
-export function DocumentPreview({
-  isReadonly,
-  result,
-  args,
-}: DocumentPreviewProps) {
+export function DocumentPreview({ isReadonly, result, args }: DocumentPreviewProps) {
   const { artifact, setArtifact } = useArtifact();
 
-  const { data: documents, isLoading: isDocumentsFetching } = useSWR<
-    Document[]
-  >(result ? `/api/document?id=${result.id}` : null, fetcher);
+  const { data: documents, isLoading: isDocumentsFetching } = useSWR<Document[]>(
+    result ? `/api/document?id=${result.id}` : null,
+    fetcher,
+  );
 
   const previewDocument = useMemo(() => documents?.[0], [documents]);
   const hitboxRef = useRef<HTMLDivElement>(null);
@@ -103,11 +93,7 @@ export function DocumentPreview({
 
   return (
     <div className="relative w-full cursor-pointer">
-      <HitboxLayer
-        hitboxRef={hitboxRef}
-        result={result}
-        setArtifact={setArtifact}
-      />
+      <HitboxLayer hitboxRef={hitboxRef} result={result} setArtifact={setArtifact} />
       <DocumentHeader
         isStreaming={artifact.status === "streaming"}
         kind={document.kind}
@@ -150,9 +136,7 @@ const PureHitboxLayer = ({
 }: {
   hitboxRef: React.RefObject<HTMLDivElement>;
   result: any;
-  setArtifact: (
-    updaterFn: UIArtifact | ((currentArtifact: UIArtifact) => UIArtifact)
-  ) => void;
+  setArtifact: (updaterFn: UIArtifact | ((currentArtifact: UIArtifact) => UIArtifact)) => void;
 }) => {
   const handleClick = useCallback(
     (event: MouseEvent<HTMLElement>) => {
@@ -173,10 +157,10 @@ const PureHitboxLayer = ({
                 width: boundingBox.width,
                 height: boundingBox.height,
               },
-            }
+            },
       );
     },
-    [setArtifact, result]
+    [setArtifact, result],
   );
 
   return (
@@ -250,7 +234,7 @@ const DocumentContent = ({ document }: { document: Document }) => {
     {
       "p-4 sm:px-14 sm:py-16": document.kind === "text",
       "p-0": document.kind === "code",
-    }
+    },
   );
 
   const commonProps = {

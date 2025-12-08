@@ -1,26 +1,26 @@
 "use client";
 
+import {
+  CheckCircle2,
+  Clock,
+  Code2,
+  FileText,
+  Github,
+  Globe,
+  MessageSquare,
+  Search,
+  Shield,
+  Sparkles,
+  Star,
+  X,
+  Zap,
+} from "lucide-react";
 import { useState } from "react";
+import { SidebarToggle } from "@/components/sidebar-toggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { SidebarToggle } from "@/components/sidebar-toggle";
-import {
-  Search,
-  Sparkles,
-  Star,
-  CheckCircle2,
-  Clock,
-  FileText,
-  Code2,
-  Zap,
-  X,
-  Shield,
-  Github,
-  Globe,
-  MessageSquare
-} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Types
@@ -58,7 +58,8 @@ const MOCK_SERVICES: AgentService[] = [
     name: "Reddit Market Research",
     provider: "CrossMind Official",
     category: "research",
-    description: "Deep dive into Reddit communities to understand user pain points, feature requests, and market sentiment around your product idea.",
+    description:
+      "Deep dive into Reddit communities to understand user pain points, feature requests, and market sentiment around your product idea.",
     price: "$29",
     rating: 4.8,
     reviewCount: 24,
@@ -66,20 +67,19 @@ const MOCK_SERVICES: AgentService[] = [
       "Analyze specified subreddits and keywords",
       "Extract relevant discussions and comments",
       "Generate insights report with key findings",
-      "Provide actionable recommendations"
+      "Provide actionable recommendations",
     ],
-    requiredPermissions: [
-      { type: "none", description: "No external permissions required" }
-    ],
+    requiredPermissions: [{ type: "none", description: "No external permissions required" }],
     deliverables: ["Markdown report", "CSV data export"],
-    iterationLimit: 3
+    iterationLimit: 3,
   },
   {
     id: "service-2",
     name: "Product Hunt Analysis",
     provider: "CrossMind Official",
     category: "research",
-    description: "Research similar products on Product Hunt, analyze their positioning, features, and user feedback to inform your strategy.",
+    description:
+      "Research similar products on Product Hunt, analyze their positioning, features, and user feedback to inform your strategy.",
     price: "$39",
     rating: 4.9,
     reviewCount: 18,
@@ -87,20 +87,19 @@ const MOCK_SERVICES: AgentService[] = [
       "Search and filter relevant products",
       "Analyze feature sets and positioning",
       "Compile competitive analysis",
-      "Suggest differentiation opportunities"
+      "Suggest differentiation opportunities",
     ],
-    requiredPermissions: [
-      { type: "none", description: "No external permissions required" }
-    ],
+    requiredPermissions: [{ type: "none", description: "No external permissions required" }],
     deliverables: ["Markdown report", "Comparison table"],
-    iterationLimit: 3
+    iterationLimit: 3,
   },
   {
     id: "service-3",
     name: "Design Document Generation",
     provider: "CrossMind Official",
     category: "design",
-    description: "Generate comprehensive design documentation including user flows, wireframes description, and design system recommendations.",
+    description:
+      "Generate comprehensive design documentation including user flows, wireframes description, and design system recommendations.",
     price: "$49",
     rating: 4.7,
     reviewCount: 31,
@@ -108,20 +107,19 @@ const MOCK_SERVICES: AgentService[] = [
       "Review product requirements",
       "Create user flow diagrams",
       "Generate wireframe descriptions",
-      "Document design system guidelines"
+      "Document design system guidelines",
     ],
-    requiredPermissions: [
-      { type: "notion", description: "Write access to Notion workspace" }
-    ],
+    requiredPermissions: [{ type: "notion", description: "Write access to Notion workspace" }],
     deliverables: ["Notion document", "Markdown export"],
-    iterationLimit: 5
+    iterationLimit: 5,
   },
   {
     id: "service-4",
     name: "GitHub Workflow Setup",
     provider: "CrossMind Official",
     category: "development",
-    description: "Automatically configure GitHub Actions workflows for CI/CD, code quality checks, and automated deployments.",
+    description:
+      "Automatically configure GitHub Actions workflows for CI/CD, code quality checks, and automated deployments.",
     price: "$59",
     rating: 4.9,
     reviewCount: 42,
@@ -129,20 +127,19 @@ const MOCK_SERVICES: AgentService[] = [
       "Analyze repository structure",
       "Generate appropriate workflow files",
       "Configure environment variables",
-      "Set up branch protection rules"
+      "Set up branch protection rules",
     ],
-    requiredPermissions: [
-      { type: "github", description: "Write access to repository" }
-    ],
+    requiredPermissions: [{ type: "github", description: "Write access to repository" }],
     deliverables: ["GitHub Actions workflows", "Configuration files"],
-    iterationLimit: 4
+    iterationLimit: 4,
   },
   {
     id: "service-5",
     name: "Waitlist Landing Page",
     provider: "CrossMind Official",
     category: "marketing",
-    description: "Generate a complete waitlist landing page with email capture, social proof, and conversion optimization.",
+    description:
+      "Generate a complete waitlist landing page with email capture, social proof, and conversion optimization.",
     price: "$79",
     rating: 4.6,
     reviewCount: 15,
@@ -150,14 +147,12 @@ const MOCK_SERVICES: AgentService[] = [
       "Design landing page structure",
       "Generate HTML/CSS code",
       "Set up email integration",
-      "Add analytics tracking"
+      "Add analytics tracking",
     ],
-    requiredPermissions: [
-      { type: "vercel", description: "Deploy access to Vercel project" }
-    ],
+    requiredPermissions: [{ type: "vercel", description: "Deploy access to Vercel project" }],
     deliverables: ["HTML/CSS files", "Deployment guide"],
-    iterationLimit: 5
-  }
+    iterationLimit: 5,
+  },
 ];
 
 const CATEGORY_CONFIG = {
@@ -173,15 +168,15 @@ const MOCK_ORDERS: ServiceOrder[] = [
     serviceId: "service-1",
     status: "completed",
     iterationsUsed: 2,
-    iterationsLimit: 3
+    iterationsLimit: 3,
   },
   {
     id: "order-2",
     serviceId: "service-4",
     status: "in-progress",
     iterationsUsed: 1,
-    iterationsLimit: 4
-  }
+    iterationsLimit: 4,
+  },
 ];
 
 export default function AgentHiringPage() {
@@ -190,9 +185,10 @@ export default function AgentHiringPage() {
   const [selectedService, setSelectedService] = useState<AgentService | null>(null);
   const [showOrderForm, setShowOrderForm] = useState(false);
 
-  const filteredServices = MOCK_SERVICES.filter(service => {
-    const matchesSearch = service.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         service.description.toLowerCase().includes(searchQuery.toLowerCase());
+  const filteredServices = MOCK_SERVICES.filter((service) => {
+    const matchesSearch =
+      service.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      service.description.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = !selectedCategory || service.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
@@ -207,7 +203,7 @@ export default function AgentHiringPage() {
   };
 
   const getOrderStatus = (serviceId: string) => {
-    return MOCK_ORDERS.find(o => o.serviceId === serviceId);
+    return MOCK_ORDERS.find((o) => o.serviceId === serviceId);
   };
 
   return (
@@ -254,17 +250,21 @@ export default function AgentHiringPage() {
       {/* Main Content */}
       <div className="flex-1 overflow-hidden flex">
         {/* Services List */}
-        <div className={cn(
-          "flex-1 flex flex-col border-r transition-all",
-          selectedService ? "w-1/2" : "w-full"
-        )}>
+        <div
+          className={cn(
+            "flex-1 flex flex-col border-r transition-all",
+            selectedService ? "w-1/2" : "w-full",
+          )}
+        >
           <ScrollArea className="flex-1">
             <div className="divide-y divide-border/50">
               {filteredServices.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
                   <Sparkles className="h-12 w-12 text-muted-foreground/20 mb-3" />
                   <p className="text-sm text-muted-foreground">No services found</p>
-                  <p className="text-xs text-muted-foreground/60 mt-1">Try adjusting your search or filters</p>
+                  <p className="text-xs text-muted-foreground/60 mt-1">
+                    Try adjusting your search or filters
+                  </p>
                 </div>
               ) : (
                 filteredServices.map((service) => {
@@ -277,7 +277,7 @@ export default function AgentHiringPage() {
                       key={service.id}
                       className={cn(
                         "group flex items-center gap-4 px-6 py-3 hover:bg-muted/40 cursor-pointer transition-colors",
-                        selectedService?.id === service.id && "bg-muted/60"
+                        selectedService?.id === service.id && "bg-muted/60",
                       )}
                       onClick={() => handleServiceClick(service)}
                     >
@@ -307,11 +307,13 @@ export default function AgentHiringPage() {
                         {order && (
                           <>
                             <span>·</span>
-                            <span className={cn(
-                              order.status === "completed" && "text-green-600",
-                              order.status === "in-progress" && "text-blue-600",
-                              order.status === "feedback" && "text-yellow-600"
-                            )}>
+                            <span
+                              className={cn(
+                                order.status === "completed" && "text-green-600",
+                                order.status === "in-progress" && "text-blue-600",
+                                order.status === "feedback" && "text-yellow-600",
+                              )}
+                            >
                               {order.status === "completed" && "Completed"}
                               {order.status === "in-progress" && "In Progress"}
                               {order.status === "feedback" && "Feedback"}
@@ -332,13 +334,24 @@ export default function AgentHiringPage() {
           <div className="w-1/2 flex flex-col border-l bg-background shrink-0">
             <div className="flex items-center justify-between p-4 border-b shrink-0">
               <div className="flex items-center gap-3">
-                <div className={cn(
-                  "p-2 rounded-md",
-                  CATEGORY_CONFIG[selectedService.category].color.replace("bg-", "bg-").replace("-500", "-500/10")
-                )}>
+                <div
+                  className={cn(
+                    "p-2 rounded-md",
+                    CATEGORY_CONFIG[selectedService.category].color
+                      .replace("bg-", "bg-")
+                      .replace("-500", "-500/10"),
+                  )}
+                >
                   {(() => {
                     const Icon = CATEGORY_CONFIG[selectedService.category].icon;
-                    return <Icon className={cn("h-4 w-4", CATEGORY_CONFIG[selectedService.category].color.replace("bg-", "text-"))} />;
+                    return (
+                      <Icon
+                        className={cn(
+                          "h-4 w-4",
+                          CATEGORY_CONFIG[selectedService.category].color.replace("bg-", "text-"),
+                        )}
+                      />
+                    );
                   })()}
                 </div>
                 <div>
@@ -361,7 +374,9 @@ export default function AgentHiringPage() {
                 {/* Description */}
                 <div>
                   <h3 className="text-xs font-medium text-muted-foreground mb-2">Description</h3>
-                  <p className="text-sm text-foreground leading-relaxed">{selectedService.description}</p>
+                  <p className="text-sm text-foreground leading-relaxed">
+                    {selectedService.description}
+                  </p>
                 </div>
 
                 {/* Work Steps */}
@@ -370,7 +385,9 @@ export default function AgentHiringPage() {
                   <ol className="space-y-2">
                     {selectedService.workSteps.map((step, index) => (
                       <li key={index} className="flex items-start gap-2 text-sm text-foreground">
-                        <span className="text-xs text-muted-foreground font-mono mt-0.5 shrink-0">{index + 1}.</span>
+                        <span className="text-xs text-muted-foreground font-mono mt-0.5 shrink-0">
+                          {index + 1}.
+                        </span>
                         <span>{step}</span>
                       </li>
                     ))}
@@ -379,19 +396,28 @@ export default function AgentHiringPage() {
 
                 {/* Required Permissions */}
                 <div>
-                  <h3 className="text-xs font-medium text-muted-foreground mb-2">Required Permissions</h3>
+                  <h3 className="text-xs font-medium text-muted-foreground mb-2">
+                    Required Permissions
+                  </h3>
                   <div className="space-y-2">
-                      {selectedService.requiredPermissions.map((perm, index) => {
+                    {selectedService.requiredPermissions.map((perm, index) => {
                       const getIcon = () => {
                         switch (perm.type) {
-                          case "github": return <Github className="h-3.5 w-3.5 text-muted-foreground" />;
-                          case "notion": return <FileText className="h-3.5 w-3.5 text-muted-foreground" />;
-                          case "vercel": return <Globe className="h-3.5 w-3.5 text-muted-foreground" />;
-                          default: return <Shield className="h-3.5 w-3.5 text-muted-foreground" />;
+                          case "github":
+                            return <Github className="h-3.5 w-3.5 text-muted-foreground" />;
+                          case "notion":
+                            return <FileText className="h-3.5 w-3.5 text-muted-foreground" />;
+                          case "vercel":
+                            return <Globe className="h-3.5 w-3.5 text-muted-foreground" />;
+                          default:
+                            return <Shield className="h-3.5 w-3.5 text-muted-foreground" />;
                         }
                       };
                       return (
-                        <div key={index} className="flex items-center gap-2 text-xs text-foreground">
+                        <div
+                          key={index}
+                          className="flex items-center gap-2 text-xs text-foreground"
+                        >
                           {getIcon()}
                           <span>{perm.description}</span>
                         </div>
@@ -416,7 +442,9 @@ export default function AgentHiringPage() {
                 {/* Pricing & Reviews */}
                 <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/20">
                   <div className="flex items-center gap-3">
-                    <span className="text-sm font-medium text-foreground">{selectedService.price}</span>
+                    <span className="text-sm font-medium text-foreground">
+                      {selectedService.price}
+                    </span>
                     <span className="text-xs text-muted-foreground/60">·</span>
                     <div className="flex items-center gap-1 text-xs text-muted-foreground">
                       <Star className="h-3 w-3 fill-yellow-500 text-yellow-500" />
@@ -433,22 +461,17 @@ export default function AgentHiringPage() {
 
                 {/* Order Form or Status */}
                 {!showOrderForm ? (
-                  <Button
-                    onClick={handleOrder}
-                    className="w-full"
-                    size="sm"
-                  >
+                  <Button onClick={handleOrder} className="w-full" size="sm">
                     <Sparkles className="h-3.5 w-3.5 mr-2" />
                     Order Service
                   </Button>
                 ) : (
                   <div className="space-y-4 p-4 border rounded-lg bg-muted/20">
                     <div>
-                      <label className="text-xs font-medium text-muted-foreground mb-1 block">Service Input</label>
-                      <Input
-                        placeholder="Describe what you need..."
-                        className="h-9 text-xs"
-                      />
+                      <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                        Service Input
+                      </label>
+                      <Input placeholder="Describe what you need..." className="h-9 text-xs" />
                     </div>
                     <div className="flex gap-2">
                       <Button

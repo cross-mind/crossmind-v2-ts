@@ -1,19 +1,8 @@
 import { toast } from "sonner";
 import { CodeEditor } from "@/components/code-editor";
-import {
-  Console,
-  type ConsoleOutput,
-  type ConsoleOutputContent,
-} from "@/components/console";
+import { Console, type ConsoleOutput, type ConsoleOutputContent } from "@/components/console";
 import { Artifact } from "@/components/create-artifact";
-import {
-  CopyIcon,
-  LogsIcon,
-  MessageIcon,
-  PlayIcon,
-  RedoIcon,
-  UndoIcon,
-} from "@/components/icons";
+import { CopyIcon, LogsIcon, MessageIcon, PlayIcon, RedoIcon, UndoIcon } from "@/components/icons";
 import { generateUUID } from "@/lib/utils";
 
 const OUTPUT_HANDLERS = {
@@ -68,8 +57,7 @@ type Metadata = {
 
 export const codeArtifact = new Artifact<"code", Metadata>({
   kind: "code",
-  description:
-    "Useful for code generation; Code execution is only available for python code.",
+  description: "Useful for code generation; Code execution is only available for python code.",
   initialize: ({ setMetadata }) => {
     setMetadata({
       outputs: [],
@@ -141,9 +129,7 @@ export const codeArtifact = new Artifact<"code", Metadata>({
           currentPyodideInstance.setStdout({
             batched: (output: string) => {
               outputContent.push({
-                type: output.startsWith("data:image/png;base64")
-                  ? "image"
-                  : "text",
+                type: output.startsWith("data:image/png;base64") ? "image" : "text",
                 value: output,
               });
             },
@@ -169,13 +155,11 @@ export const codeArtifact = new Artifact<"code", Metadata>({
           for (const handler of requiredHandlers) {
             if (OUTPUT_HANDLERS[handler as keyof typeof OUTPUT_HANDLERS]) {
               await currentPyodideInstance.runPythonAsync(
-                OUTPUT_HANDLERS[handler as keyof typeof OUTPUT_HANDLERS]
+                OUTPUT_HANDLERS[handler as keyof typeof OUTPUT_HANDLERS],
               );
 
               if (handler === "matplotlib") {
-                await currentPyodideInstance.runPythonAsync(
-                  "setup_matplotlib_output()"
-                );
+                await currentPyodideInstance.runPythonAsync("setup_matplotlib_output()");
               }
             }
           }

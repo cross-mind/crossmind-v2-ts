@@ -1,20 +1,13 @@
 import { createUIMessageStream, JsonToSseTransformStream } from "ai";
 import { differenceInSeconds } from "date-fns";
 import { auth } from "@/app/(auth)/auth";
-import {
-  getChatById,
-  getMessagesByChatId,
-  getStreamIdsByChatId,
-} from "@/lib/db/queries";
+import { getChatById, getMessagesByChatId, getStreamIdsByChatId } from "@/lib/db/queries";
 import type { Chat } from "@/lib/db/schema";
 import { ChatSDKError } from "@/lib/errors";
 import type { ChatMessage } from "@/lib/types";
 import { getStreamContext } from "../../route";
 
-export async function GET(
-  _: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id: chatId } = await params;
 
   const streamContext = getStreamContext();
@@ -68,7 +61,7 @@ export async function GET(
   });
 
   const stream = await streamContext.resumableStream(recentStreamId, () =>
-    emptyDataStream.pipeThrough(new JsonToSseTransformStream())
+    emptyDataStream.pipeThrough(new JsonToSseTransformStream()),
   );
 
   /*
@@ -103,10 +96,9 @@ export async function GET(
       },
     });
 
-    return new Response(
-      restoredStream.pipeThrough(new JsonToSseTransformStream()),
-      { status: 200 }
-    );
+    return new Response(restoredStream.pipeThrough(new JsonToSseTransformStream()), {
+      status: 200,
+    });
   }
 
   return new Response(stream, { status: 200 });

@@ -15,12 +15,9 @@ export default function Page() {
   const [email, setEmail] = useState("");
   const [isSuccessful, setIsSuccessful] = useState(false);
 
-  const [state, formAction] = useActionState<RegisterActionState, FormData>(
-    register,
-    {
-      status: "idle",
-    }
-  );
+  const [state, formAction] = useActionState<RegisterActionState, FormData>(register, {
+    status: "idle",
+  });
 
   const { update: updateSession } = useSession();
 

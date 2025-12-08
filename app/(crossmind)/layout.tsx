@@ -4,11 +4,7 @@ import { CrossMindSidebar } from "@/components/crossmind-sidebar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { auth } from "../(auth)/auth";
 
-export default function CrossMindLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function CrossMindLayout({ children }: { children: React.ReactNode }) {
   return (
     <Suspense fallback={<div className="flex h-dvh" />}>
       <SidebarWrapper>{children}</SidebarWrapper>

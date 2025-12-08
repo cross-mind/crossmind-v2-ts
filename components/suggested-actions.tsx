@@ -22,10 +22,7 @@ function PureSuggestedActions({ chatId, sendMessage }: SuggestedActionsProps) {
   ];
 
   return (
-    <div
-      className="grid w-full gap-2 sm:grid-cols-2"
-      data-testid="suggested-actions"
-    >
+    <div className="grid w-full gap-2 sm:grid-cols-2" data-testid="suggested-actions">
       {suggestedActions.map((suggestedAction, index) => (
         <motion.div
           animate={{ opacity: 1, y: 0 }}
@@ -53,16 +50,13 @@ function PureSuggestedActions({ chatId, sendMessage }: SuggestedActionsProps) {
   );
 }
 
-export const SuggestedActions = memo(
-  PureSuggestedActions,
-  (prevProps, nextProps) => {
-    if (prevProps.chatId !== nextProps.chatId) {
-      return false;
-    }
-    if (prevProps.selectedVisibilityType !== nextProps.selectedVisibilityType) {
-      return false;
-    }
-
-    return true;
+export const SuggestedActions = memo(PureSuggestedActions, (prevProps, nextProps) => {
+  if (prevProps.chatId !== nextProps.chatId) {
+    return false;
   }
-);
+  if (prevProps.selectedVisibilityType !== nextProps.selectedVisibilityType) {
+    return false;
+  }
+
+  return true;
+});

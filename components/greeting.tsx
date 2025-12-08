@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Sparkles, Lightbulb, Code2, FileText } from "lucide-react";
+import { Code2, FileText, Lightbulb, Sparkles } from "lucide-react";
 
 export const Greeting = () => {
   return (

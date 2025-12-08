@@ -9,10 +9,7 @@ import {
 } from "ai";
 import { unstable_cache as cache } from "next/cache";
 import { after } from "next/server";
-import {
-  createResumableStreamContext,
-  type ResumableStreamContext,
-} from "resumable-stream";
+import { createResumableStreamContext, type ResumableStreamContext } from "resumable-stream";
 import type { ModelCatalog } from "tokenlens/core";
 import { fetchModels } from "tokenlens/fetch";
 import { getUsage } from "tokenlens/helpers";
@@ -54,15 +51,12 @@ const getTokenlensCatalog = cache(
     try {
       return await fetchModels();
     } catch (err) {
-      console.warn(
-        "TokenLens: catalog fetch failed, using default catalog",
-        err
-      );
+      console.warn("TokenLens: catalog fetch failed, using default catalog", err);
       return; // tokenlens helpers will fall back to defaultCatalog
     }
   },
   ["tokenlens-catalog"],
-  { revalidate: 24 * 60 * 60 } // 24 hours
+  { revalidate: 24 * 60 * 60 }, // 24 hours
 );
 
 export function getStreamContext() {
@@ -73,9 +67,7 @@ export function getStreamContext() {
       });
     } catch (error: any) {
       if (error.message.includes("REDIS_URL")) {
-        console.log(
-          " > Resumable streams are disabled due to missing REDIS_URL"
-        );
+        console.log(" > Resumable streams are disabled due to missing REDIS_URL");
       } else {
         console.error(error);
       }
@@ -187,12 +179,7 @@ export async function POST(request: Request) {
           experimental_activeTools:
             selectedChatModel === "chat-model-reasoning"
               ? []
-              : [
-                  "getWeather",
-                  "createDocument",
-                  "updateDocument",
-                  "requestSuggestions",
-                ],
+              : ["getWeather", "createDocument", "updateDocument", "requestSuggestions"],
           experimental_transform: smoothStream({ chunking: "word" }),
           tools: {
             getWeather,
@@ -210,8 +197,7 @@ export async function POST(request: Request) {
           onFinish: async ({ usage }) => {
             try {
               const providers = await getTokenlensCatalog();
-              const modelId =
-                myProvider.languageModel(selectedChatModel).modelId;
+              const modelId = myProvider.languageModel(selectedChatModel).modelId;
               if (!modelId) {
                 finalMergedUsage = usage;
                 dataStream.write({
@@ -246,7 +232,7 @@ export async function POST(request: Request) {
         dataStream.merge(
           result.toUIMessageStream({
             sendReasoning: true,
-          })
+          }),
         );
       },
       generateId: generateUUID,
@@ -299,9 +285,7 @@ export async function POST(request: Request) {
     // Check for Vercel AI Gateway credit card error
     if (
       error instanceof Error &&
-      error.message?.includes(
-        "AI Gateway requires a valid credit card on file to service requests"
-      )
+      error.message?.includes("AI Gateway requires a valid credit card on file to service requests")
     ) {
       return new ChatSDKError("bad_request:activate_gateway").toResponse();
     }

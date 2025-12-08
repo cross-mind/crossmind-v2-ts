@@ -1,14 +1,14 @@
 "use client";
 
+import { MessageSquare } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { memo } from "react";
 import { useWindowSize } from "usehooks-ts";
-import { MessageSquare } from "lucide-react";
 import { SidebarToggle } from "@/components/sidebar-toggle";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { PlusIcon, VercelIcon } from "./icons";
+import { VercelIcon } from "./icons";
 import { useSidebar } from "./ui/sidebar";
 import { VisibilitySelector, type VisibilityType } from "./visibility-selector";
 
@@ -21,7 +21,7 @@ function PureChatHeader({
   selectedVisibilityType: VisibilityType;
   isReadonly: boolean;
 }) {
-  const router = useRouter();
+  const _router = useRouter();
   const { open } = useSidebar();
 
   const { width: windowWidth } = useWindowSize();
@@ -37,10 +37,7 @@ function PureChatHeader({
 
       <div className="flex items-center gap-2">
         {!isReadonly && (
-          <VisibilitySelector
-            chatId={chatId}
-            selectedVisibilityType={selectedVisibilityType}
-          />
+          <VisibilitySelector chatId={chatId} selectedVisibilityType={selectedVisibilityType} />
         )}
 
         <Button

@@ -81,59 +81,50 @@ export function Chat({
     currentModelIdRef.current = currentModelId;
   }, [currentModelId]);
 
-  const {
-    messages,
-    setMessages,
-    sendMessage,
-    status,
-    stop,
-    regenerate,
-    resumeStream,
-  } = useChat<ChatMessage>({
-    id,
-    messages: initialMessages,
-    experimental_throttle: 100,
-    generateId: generateUUID,
-    transport: new DefaultChatTransport({
-      api: "/api/chat",
-      fetch: fetchWithErrorHandlers,
-      prepareSendMessagesRequest(request) {
-        return {
-          body: {
-            id: request.id,
-            message: request.messages.at(-1),
-            selectedChatModel: currentModelIdRef.current,
-            selectedVisibilityType: visibilityType,
-            ...request.body,
-          },
-        };
-      },
-    }),
-    onData: (dataPart) => {
-      setDataStream((ds) => (ds ? [...ds, dataPart] : []));
-      if (dataPart.type === "data-usage") {
-        setUsage(dataPart.data);
-      }
-    },
-    onFinish: () => {
-      mutate(unstable_serialize(getChatHistoryPaginationKey));
-    },
-    onError: (error) => {
-      if (error instanceof ChatSDKError) {
-        // Check if it's a credit card error
-        if (
-          error.message?.includes("AI Gateway requires a valid credit card")
-        ) {
-          setShowCreditCardAlert(true);
-        } else {
-          toast({
-            type: "error",
-            description: error.message,
-          });
+  const { messages, setMessages, sendMessage, status, stop, regenerate, resumeStream } =
+    useChat<ChatMessage>({
+      id,
+      messages: initialMessages,
+      experimental_throttle: 100,
+      generateId: generateUUID,
+      transport: new DefaultChatTransport({
+        api: "/api/chat",
+        fetch: fetchWithErrorHandlers,
+        prepareSendMessagesRequest(request) {
+          return {
+            body: {
+              id: request.id,
+              message: request.messages.at(-1),
+              selectedChatModel: currentModelIdRef.current,
+              selectedVisibilityType: visibilityType,
+              ...request.body,
+            },
+          };
+        },
+      }),
+      onData: (dataPart) => {
+        setDataStream((ds) => (ds ? [...ds, dataPart] : []));
+        if (dataPart.type === "data-usage") {
+          setUsage(dataPart.data);
         }
-      }
-    },
-  });
+      },
+      onFinish: () => {
+        mutate(unstable_serialize(getChatHistoryPaginationKey));
+      },
+      onError: (error) => {
+        if (error instanceof ChatSDKError) {
+          // Check if it's a credit card error
+          if (error.message?.includes("AI Gateway requires a valid credit card")) {
+            setShowCreditCardAlert(true);
+          } else {
+            toast({
+              type: "error",
+              description: error.message,
+            });
+          }
+        }
+      },
+    });
 
   const searchParams = useSearchParams();
   const query = searchParams.get("query");
@@ -154,7 +145,7 @@ export function Chat({
 
   const { data: votes } = useSWR<Vote[]>(
     messages.length >= 2 ? `/api/vote?chatId=${id}` : null,
-    fetcher
+    fetcher,
   );
 
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -228,17 +219,14 @@ export function Chat({
         votes={votes}
       />
 
-      <AlertDialog
-        onOpenChange={setShowCreditCardAlert}
-        open={showCreditCardAlert}
-      >
+      <AlertDialog onOpenChange={setShowCreditCardAlert} open={showCreditCardAlert}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Activate AI Gateway</AlertDialogTitle>
             <AlertDialogDescription>
               This application requires{" "}
-              {process.env.NODE_ENV === "production" ? "the owner" : "you"} to
-              activate Vercel AI Gateway.
+              {process.env.NODE_ENV === "production" ? "the owner" : "you"} to activate Vercel AI
+              Gateway.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -247,7 +235,7 @@ export function Chat({
               onClick={() => {
                 window.open(
                   "https://vercel.com/d?to=%2F%5Bteam%5D%2F%7E%2Fai%3Fmodal%3Dadd-credit-card",
-                  "_blank"
+                  "_blank",
                 );
                 window.location.href = "/";
               }}

@@ -7,10 +7,7 @@ export async function GET(request: Request) {
   const chatId = searchParams.get("chatId");
 
   if (!chatId) {
-    return new ChatSDKError(
-      "bad_request:api",
-      "Parameter chatId is required."
-    ).toResponse();
+    return new ChatSDKError("bad_request:api", "Parameter chatId is required.").toResponse();
   }
 
   const session = await auth();
@@ -35,17 +32,13 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const {
-    chatId,
-    messageId,
-    type,
-  }: { chatId: string; messageId: string; type: "up" | "down" } =
+  const { chatId, messageId, type }: { chatId: string; messageId: string; type: "up" | "down" } =
     await request.json();
 
   if (!chatId || !messageId || !type) {
     return new ChatSDKError(
       "bad_request:api",
-      "Parameters chatId, messageId, and type are required."
+      "Parameters chatId, messageId, and type are required.",
     ).toResponse();
   }
 

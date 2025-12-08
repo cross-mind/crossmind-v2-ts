@@ -80,7 +80,7 @@ export const voteDeprecated = pgTable(
     return {
       pk: primaryKey({ columns: [table.chatId, table.messageId] }),
     };
-  }
+  },
 );
 
 export type VoteDeprecated = InferSelectModel<typeof voteDeprecated>;
@@ -100,7 +100,7 @@ export const vote = pgTable(
     return {
       pk: primaryKey({ columns: [table.chatId, table.messageId] }),
     };
-  }
+  },
 );
 
 export type Vote = InferSelectModel<typeof vote>;
@@ -123,7 +123,7 @@ export const document = pgTable(
     return {
       pk: primaryKey({ columns: [table.id, table.createdAt] }),
     };
-  }
+  },
 );
 
 export type Document = InferSelectModel<typeof document>;
@@ -149,7 +149,7 @@ export const suggestion = pgTable(
       columns: [table.documentId, table.documentCreatedAt],
       foreignColumns: [document.id, document.createdAt],
     }),
-  })
+  }),
 );
 
 export type Suggestion = InferSelectModel<typeof suggestion>;
@@ -167,7 +167,7 @@ export const stream = pgTable(
       columns: [table.chatId],
       foreignColumns: [chat.id],
     }),
-  })
+  }),
 );
 
 export type Stream = InferSelectModel<typeof stream>;
@@ -205,7 +205,7 @@ export const membership = pgTable(
   },
   (table) => ({
     uniqueProjectUser: primaryKey({ columns: [table.projectId, table.userId] }),
-  })
+  }),
 );
 
 export type Membership = InferSelectModel<typeof membership>;
@@ -271,7 +271,7 @@ export const taskTag = pgTable(
     uniqueTaskTag: primaryKey({
       columns: [table.taskId, table.namespace, table.value],
     }),
-  })
+  }),
 );
 
 export type TaskTag = InferSelectModel<typeof taskTag>;
@@ -289,7 +289,7 @@ export const canvasNodeTask = pgTable(
   },
   (table) => ({
     pk: primaryKey({ columns: [table.nodeId, table.taskId] }),
-  })
+  }),
 );
 
 export type CanvasNodeTask = InferSelectModel<typeof canvasNodeTask>;

@@ -19,9 +19,7 @@ export type MessageMetadata = z.infer<typeof messageMetadataSchema>;
 type weatherTool = InferUITool<typeof getWeather>;
 type createDocumentTool = InferUITool<ReturnType<typeof createDocument>>;
 type updateDocumentTool = InferUITool<ReturnType<typeof updateDocument>>;
-type requestSuggestionsTool = InferUITool<
-  ReturnType<typeof requestSuggestions>
->;
+type requestSuggestionsTool = InferUITool<ReturnType<typeof requestSuggestions>>;
 
 export type ChatTools = {
   getWeather: weatherTool;
@@ -45,11 +43,7 @@ export type CustomUIDataTypes = {
   usage: AppUsage;
 };
 
-export type ChatMessage = UIMessage<
-  MessageMetadata,
-  CustomUIDataTypes,
-  ChatTools
->;
+export type ChatMessage = UIMessage<MessageMetadata, CustomUIDataTypes, ChatTools>;
 
 export type Attachment = {
   name: string;

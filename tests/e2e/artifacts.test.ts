@@ -17,17 +17,13 @@ test.describe("Artifacts activity", () => {
     test.fixme();
     await chatPage.createNewChat();
 
-    await chatPage.sendUserMessage(
-      "Help me write an essay about Silicon Valley"
-    );
+    await chatPage.sendUserMessage("Help me write an essay about Silicon Valley");
     await artifactPage.isGenerationComplete();
 
     expect(artifactPage.artifact).toBeVisible();
 
     const assistantMessage = await chatPage.getRecentAssistantMessage();
-    expect(assistantMessage.content).toBe(
-      "A document was created and is now visible to the user."
-    );
+    expect(assistantMessage.content).toBe("A document was created and is now visible to the user.");
 
     await chatPage.hasChatIdInUrl();
   });
@@ -36,17 +32,13 @@ test.describe("Artifacts activity", () => {
     test.fixme();
     await chatPage.createNewChat();
 
-    await chatPage.sendUserMessage(
-      "Help me write an essay about Silicon Valley"
-    );
+    await chatPage.sendUserMessage("Help me write an essay about Silicon Valley");
     await artifactPage.isGenerationComplete();
 
     expect(artifactPage.artifact).toBeVisible();
 
     const assistantMessage = await chatPage.getRecentAssistantMessage();
-    expect(assistantMessage.content).toBe(
-      "A document was created and is now visible to the user."
-    );
+    expect(assistantMessage.content).toBe("A document was created and is now visible to the user.");
 
     await artifactPage.closeArtifact();
     await chatPage.isElementNotVisible("artifact");
@@ -56,17 +48,13 @@ test.describe("Artifacts activity", () => {
     test.fixme();
     await chatPage.createNewChat();
 
-    await chatPage.sendUserMessage(
-      "Help me write an essay about Silicon Valley"
-    );
+    await chatPage.sendUserMessage("Help me write an essay about Silicon Valley");
     await artifactPage.isGenerationComplete();
 
     expect(artifactPage.artifact).toBeVisible();
 
     const assistantMessage = await artifactPage.getRecentAssistantMessage();
-    expect(assistantMessage.content).toBe(
-      "A document was created and is now visible to the user."
-    );
+    expect(assistantMessage.content).toBe("A document was created and is now visible to the user.");
 
     await artifactPage.sendUserMessage("Thanks!");
     await artifactPage.isGenerationComplete();

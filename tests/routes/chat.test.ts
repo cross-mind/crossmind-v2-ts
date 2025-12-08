@@ -26,9 +26,7 @@ function normalizeStreamData(lines: string[]): string[] {
 
 test.describe
   .serial("/api/chat", () => {
-    test("Ada cannot invoke a chat generation with empty request body", async ({
-      adaContext,
-    }) => {
+    test("Ada cannot invoke a chat generation with empty request body", async ({ adaContext }) => {
       const response = await adaContext.request.post("/api/chat", {
         data: JSON.stringify({}),
       });
@@ -57,18 +55,14 @@ test.describe
 
       const [_, ...rest] = lines;
       const actualNormalized = normalizeStreamData(rest.filter(Boolean));
-      const expectedNormalized = normalizeStreamData(
-        TEST_PROMPTS.SKY.OUTPUT_STREAM
-      );
+      const expectedNormalized = normalizeStreamData(TEST_PROMPTS.SKY.OUTPUT_STREAM);
 
       expect(actualNormalized).toEqual(expectedNormalized);
 
       chatIdsCreatedByAda.push(chatId);
     });
 
-    test("Babbage cannot append message to Ada's chat", async ({
-      babbageContext,
-    }) => {
+    test("Babbage cannot append message to Ada's chat", async ({ babbageContext }) => {
       const [chatId] = chatIdsCreatedByAda;
 
       const response = await babbageContext.request.post("/api/chat", {
@@ -89,9 +83,7 @@ test.describe
     test("Babbage cannot delete Ada's chat", async ({ babbageContext }) => {
       const [chatId] = chatIdsCreatedByAda;
 
-      const response = await babbageContext.request.delete(
-        `/api/chat?id=${chatId}`
-      );
+      const response = await babbageContext.request.delete(`/api/chat?id=${chatId}`);
       expect(response.status()).toBe(403);
 
       const { code, message } = await response.json();
@@ -102,21 +94,15 @@ test.describe
     test("Ada can delete her own chat", async ({ adaContext }) => {
       const [chatId] = chatIdsCreatedByAda;
 
-      const response = await adaContext.request.delete(
-        `/api/chat?id=${chatId}`
-      );
+      const response = await adaContext.request.delete(`/api/chat?id=${chatId}`);
       expect(response.status()).toBe(200);
 
       const deletedChat = await response.json();
       expect(deletedChat).toMatchObject({ id: chatId });
     });
 
-    test("Ada cannot resume stream of chat that does not exist", async ({
-      adaContext,
-    }) => {
-      const response = await adaContext.request.get(
-        `/api/chat/${generateUUID()}/stream`
-      );
+    test("Ada cannot resume stream of chat that does not exist", async ({ adaContext }) => {
+      const response = await adaContext.request.get(`/api/chat/${generateUUID()}/stream`);
       expect(response.status()).toBe(404);
     });
 
@@ -145,14 +131,9 @@ test.describe
 
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      const secondRequest = adaContext.request.get(
-        `/api/chat/${chatId}/stream`
-      );
+      const secondRequest = adaContext.request.get(`/api/chat/${chatId}/stream`);
 
-      const [firstResponse, secondResponse] = await Promise.all([
-        firstRequest,
-        secondRequest,
-      ]);
+      const [firstResponse, secondResponse] = await Promise.all([firstRequest, secondRequest]);
 
       const [firstStatusCode, secondStatusCode] = await Promise.all([
         firstResponse.status(),
@@ -167,14 +148,10 @@ test.describe
         await secondResponse.body(),
       ]);
 
-      expect(firstResponseBody.toString()).toEqual(
-        secondResponseBody.toString()
-      );
+      expect(firstResponseBody.toString()).toEqual(secondResponseBody.toString());
     });
 
-    test("Ada can resume chat generation that has ended during request", async ({
-      adaContext,
-    }) => {
+    test("Ada can resume chat generation that has ended during request", async ({ adaContext }) => {
       const chatId = generateUUID();
 
       const firstRequest = await adaContext.request.post("/api/chat", {
@@ -197,14 +174,9 @@ test.describe
         },
       });
 
-      const secondRequest = adaContext.request.get(
-        `/api/chat/${chatId}/stream`
-      );
+      const secondRequest = adaContext.request.get(`/api/chat/${chatId}/stream`);
 
-      const [firstResponse, secondResponse] = await Promise.all([
-        firstRequest,
-        secondRequest,
-      ]);
+      const [firstResponse, secondResponse] = await Promise.all([firstRequest, secondRequest]);
 
       const [firstStatusCode, secondStatusCode] = await Promise.all([
         firstResponse.status(),
@@ -222,9 +194,7 @@ test.describe
       expect(secondResponseContent).toContain("appendMessage");
     });
 
-    test("Ada cannot resume chat generation that has ended", async ({
-      adaContext,
-    }) => {
+    test("Ada cannot resume chat generation that has ended", async ({ adaContext }) => {
       const chatId = generateUUID();
 
       const firstResponse = await adaContext.request.post("/api/chat", {
@@ -253,9 +223,7 @@ test.describe
       await firstResponse.text();
       await new Promise((resolve) => setTimeout(resolve, 15 * 1000));
       await new Promise((resolve) => setTimeout(resolve, 15_000));
-      const secondResponse = await adaContext.request.get(
-        `/api/chat/${chatId}/stream`
-      );
+      const secondResponse = await adaContext.request.get(`/api/chat/${chatId}/stream`);
 
       const secondStatusCode = secondResponse.status();
       expect(secondStatusCode).toBe(200);
@@ -292,14 +260,9 @@ test.describe
 
       await new Promise((resolve) => setTimeout(resolve, 1000));
 
-      const secondRequest = babbageContext.request.get(
-        `/api/chat/${chatId}/stream`
-      );
+      const secondRequest = babbageContext.request.get(`/api/chat/${chatId}/stream`);
 
-      const [firstResponse, secondResponse] = await Promise.all([
-        firstRequest,
-        secondRequest,
-      ]);
+      const [firstResponse, secondResponse] = await Promise.all([firstRequest, secondRequest]);
 
       const [firstStatusCode, secondStatusCode] = await Promise.all([
         firstResponse.status(),
@@ -339,14 +302,9 @@ test.describe
 
       await new Promise((resolve) => setTimeout(resolve, 10 * 1000));
 
-      const secondRequest = babbageContext.request.get(
-        `/api/chat/${chatId}/stream`
-      );
+      const secondRequest = babbageContext.request.get(`/api/chat/${chatId}/stream`);
 
-      const [firstResponse, secondResponse] = await Promise.all([
-        firstRequest,
-        secondRequest,
-      ]);
+      const [firstResponse, secondResponse] = await Promise.all([firstRequest, secondRequest]);
 
       const [firstStatusCode, secondStatusCode] = await Promise.all([
         firstResponse.status(),

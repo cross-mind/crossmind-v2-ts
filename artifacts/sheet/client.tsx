@@ -1,13 +1,7 @@
 import { parse, unparse } from "papaparse";
 import { toast } from "sonner";
 import { Artifact } from "@/components/create-artifact";
-import {
-  CopyIcon,
-  LineChartIcon,
-  RedoIcon,
-  SparklesIcon,
-  UndoIcon,
-} from "@/components/icons";
+import { CopyIcon, LineChartIcon, RedoIcon, SparklesIcon, UndoIcon } from "@/components/icons";
 import { SpreadsheetEditor } from "@/components/sheet-editor";
 
 type Metadata = any;
@@ -72,9 +66,7 @@ export const sheetArtifact = new Artifact<"sheet", Metadata>({
       onClick: ({ content }) => {
         const parsed = parse<string[]>(content, { skipEmptyLines: true });
 
-        const nonEmptyRows = parsed.data.filter((row) =>
-          row.some((cell) => cell.trim() !== "")
-        );
+        const nonEmptyRows = parsed.data.filter((row) => row.some((cell) => cell.trim() !== ""));
 
         const cleanedCsv = unparse(nonEmptyRows);
 
@@ -90,9 +82,7 @@ export const sheetArtifact = new Artifact<"sheet", Metadata>({
       onClick: ({ sendMessage }) => {
         sendMessage({
           role: "user",
-          parts: [
-            { type: "text", text: "Can you please format and clean the data?" },
-          ],
+          parts: [{ type: "text", text: "Can you please format and clean the data?" }],
         });
       },
     },

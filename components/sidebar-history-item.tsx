@@ -20,11 +20,7 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
-import {
-  SidebarMenuAction,
-  SidebarMenuButton,
-  SidebarMenuItem,
-} from "./ui/sidebar";
+import { SidebarMenuAction, SidebarMenuButton, SidebarMenuItem } from "./ui/sidebar";
 
 const PureChatItem = ({
   chat,
@@ -79,9 +75,7 @@ const PureChatItem = ({
                     <LockIcon size={12} />
                     <span>Private</span>
                   </div>
-                  {visibilityType === "private" ? (
-                    <CheckCircleFillIcon />
-                  ) : null}
+                  {visibilityType === "private" ? <CheckCircleFillIcon /> : null}
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="cursor-pointer flex-row justify-between"
