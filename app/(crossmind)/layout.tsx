@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { Suspense } from "react";
+import React, { Suspense } from "react";
 import { CrossMindSidebar } from "@/components/crossmind-sidebar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { auth } from "../(auth)/auth";
