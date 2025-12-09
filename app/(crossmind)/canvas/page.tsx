@@ -213,13 +213,6 @@ export default function CanvasPage() {
       const calculatedNodes: CanvasNode[] = [];
       const calculatedZoneBounds: Record<string, { width: number; height: number }> = {};
 
-      // Helper to get node depth
-      const getNodeDepth = (nodeId: string): number => {
-        const node = nodeContents.find((n) => n.id === nodeId);
-        if (!node?.parentId) return 0;
-        return 1 + getNodeDepth(node.parentId);
-      };
-
       // Track max height across all zones
       let globalMaxHeight = 0;
 
@@ -227,7 +220,13 @@ export default function CanvasPage() {
       for (const [zoneName, config] of Object.entries(ZONE_CONFIGS)) {
         const currentYInColumn: number[] = Array(config.columnCount).fill(90); // Top padding for zone header (label + spacing)
 
-        config.nodeIds.forEach((nodeId) => {
+        // Get only root nodes (without parentId) from this zone
+        const rootNodeIds = config.nodeIds.filter(nodeId => {
+          const content = nodeContents.find(n => n.id === nodeId);
+          return content && !content.parentId;
+        });
+
+        rootNodeIds.forEach((nodeId) => {
           const content = nodeContents.find((n) => n.id === nodeId);
           if (!content) return;
 
@@ -236,17 +235,17 @@ export default function CanvasPage() {
           const x = config.startX + currentColumn * (NODE_WIDTH + COLUMN_GAP);
           const y = currentYInColumn[currentColumn];
 
-          // Get measured height from DOM
+          // Get measured height from DOM (includes nested children height)
           const nodeElement = nodeRefs.current.get(nodeId);
-          const actualHeight = nodeElement?.offsetHeight || 250; // Fallback to estimated height (increased for better initial balance)
+          const actualHeight = nodeElement?.offsetHeight || 280; // Fallback to estimated height with children
 
           calculatedNodes.push({
             ...content,
             position: { x, y },
           });
 
-          // Update column Y position with actual height + gap
-          currentYInColumn[currentColumn] += actualHeight + VERTICAL_GAP;
+          // Update column Y position with actual height + reduced gap (since cards are more compact now)
+          currentYInColumn[currentColumn] += actualHeight + 30; // Reduced from VERTICAL_GAP (40) to 30
         });
 
         // Calculate zone bounds based on actual content
@@ -266,6 +265,16 @@ export default function CanvasPage() {
       for (const zoneName of Object.keys(calculatedZoneBounds)) {
         calculatedZoneBounds[zoneName].height = globalMaxHeight;
       }
+
+      // Add all child nodes to calculatedNodes (they won't be positioned, but need to exist in state)
+      nodeContents.forEach(content => {
+        if (!calculatedNodes.find(n => n.id === content.id)) {
+          calculatedNodes.push({
+            ...content,
+            position: { x: 0, y: 0 }, // Position doesn't matter for child nodes (rendered inside parent)
+          });
+        }
+      });
 
       setNodes(calculatedNodes);
       setZoneBounds(calculatedZoneBounds);
