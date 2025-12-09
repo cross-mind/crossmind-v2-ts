@@ -77,17 +77,27 @@
 
 ### 3.1 Namespace 体系
 
-#### 3.1.1 预设 Namespace
+#### 3.1.1 预设 Namespace（MVP: 精简为 3 个核心）
 
-| Namespace | 值 | 适用对象 | 优先级 |
-|-----------|---|---------|-------|
-| `type` | idea/research/prototype/bug/feature/doc | Canvas/Task | P0 |
-| `level` | strategy/module/task | Canvas | P0 |
-| `stage` | ideation/research/design/dev/launch | Canvas/Task | P0 |
-| `priority` | low/medium/high/urgent | Task | P0 |
-| `risk` | high/blocked | Task | P1 |
-| `skill` | design/frontend/backend/marketing | Task | P1 |
-| `integration` | github/stripe/vercel | Task | P1 |
+| Namespace | 值 | 适用对象 | 使用场景 | 优先级 |
+|-----------|---|---------|---------|-------|
+| `type` | idea/decision/bug/feature/doc | Canvas/Task | 内容类型分类 | P0 |
+| `stage` | ideation/research/design/dev/launch | Canvas/Task | 项目阶段分类 | P0 |
+| `priority` | low/medium/high/urgent | Task | 任务优先级 | P0 |
+
+**说明**:
+- **MVP 只保留 3 个最核心的 namespace**，降低学习成本
+- 其他分类需求通过自定义标签满足
+- V1.0 可根据用户反馈逐步增加 namespace
+
+#### 3.1.2 移除的 Namespace 及替代方案
+
+| 原 Namespace | 替代方案 | 优先级 |
+|------------|---------|-------|
+| `level` | 用层级结构（父子节点）表示 | V1.0 |
+| `risk` | 用自定义标签 `blocked`、`high-risk` | V1.0 |
+| `skill` | 用自定义标签 `design`、`frontend` 等 | V1.0 |
+| `integration` | 用自定义标签 `github`、`stripe` 等 | V1.0 |
 
 #### 3.1.2 自定义 Namespace (P1)
 

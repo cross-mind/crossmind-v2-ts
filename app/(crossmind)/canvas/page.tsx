@@ -1,236 +1,383 @@
 "use client";
 
-import { Bot, FileText, Send, Sparkles, X } from "lucide-react";
-import React, { useEffect, useRef, useState } from "react";
+import {
+  Bot,
+  FileText,
+  Send,
+  Sparkles,
+  X,
+  Lightbulb,
+  CheckSquare,
+  Plus,
+  MoreHorizontal,
+  Tag,
+  Clock,
+  Calendar,
+  User,
+  MessageSquare,
+  Activity,
+} from "lucide-react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { SimpleChat } from "@/components/simple-chat";
+import type { SimpleChatMessage } from "@/components/simple-chat";
 import { SidebarToggle } from "@/components/sidebar-toggle";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  getAllNodeContents,
+  NODE_WIDTH,
+  VERTICAL_GAP,
+  COLUMN_GAP,
+  ZONE_CONFIGS,
+  MOCK_FEED,
+  MOCK_COMMENTS,
+  MOCK_SUGGESTIONS,
+  type NodeContent,
+  type CanvasNode,
+  type FeedActivity,
+  type Comment,
+  type AISuggestion,
+} from "./canvas-data";
 
-// Types
-interface DocumentNode {
-  id: string;
-  title: string;
-  type: "idea" | "prd" | "design" | "code";
-  status: "completed" | "in-progress" | "pending";
-  content: string;
-  scores: {
-    clarity: number; // 清晰度 0-100
-    completeness: number; // 完整性 0-100
-    feasibility: number; // 可行性 0-100
-    alignment: number; // 对齐度 0-100
-  };
-}
-
-interface Stage {
-  id: string;
-  title: string;
-  nodes: DocumentNode[];
-}
-
-interface ChatMessage {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-}
-
-// Mock Data - Business & Product Focus
-const PROJECT_STAGES: Stage[] = [
-  {
-    id: "stage-1",
-    title: "Market & Opportunity",
-    nodes: [
-      {
-        id: "doc-1",
-        title: "Market Analysis",
-        type: "idea",
-        status: "completed",
-        content:
-          "# Market Analysis\n\n## Market Size\n- TAM: $50B globally\n- SAM: $8B in target regions\n- SOM: $200M achievable in 3 years\n\n## Key Trends\n- Remote work adoption: +300% since 2020\n- AI automation demand growing 40% YoY\n- SMB software spending up 25%\n\n## Opportunity\nFragmented tools costing teams 2hrs/day in context switching.",
-        scores: { clarity: 100, completeness: 100, feasibility: 100, alignment: 100 },
-      },
-      {
-        id: "doc-2",
-        title: "Business Model Canvas",
-        type: "idea",
-        status: "completed",
-        content:
-          "# Business Model Canvas\n\n## Value Proposition\nAll-in-one platform: Idea → Doc → Task → Code\n\n## Customer Segments\n- Indie developers (1-2 people)\n- Small teams (3-10 people)\n- Startup founders\n\n## Revenue Streams\n- Freemium: Free for individuals\n- Pro: $15/user/month\n- Team: $12/user/month (5+ seats)\n\n## Key Metrics\n- MRR growth\n- User activation rate\n- Time-to-first-value",
-        scores: { clarity: 95, completeness: 90, feasibility: 85, alignment: 100 },
-      },
-    ],
-  },
-  {
-    id: "stage-2",
-    title: "Product Vision",
-    nodes: [
-      {
-        id: "doc-3",
-        title: "Product Brief",
-        type: "prd",
-        status: "in-progress",
-        content:
-          "# Product Brief: CrossMind\n\n## Vision\nA unified workspace where ideas transform into shipped products, powered by AI.\n\n## Problem\nTeams waste 40% of time switching between 8+ tools:\n- Notion (docs)\n- Linear (tasks)\n- GitHub (code)\n- Slack (chat)\n- Figma (design)\n\nContext is lost. Progress is invisible.\n\n## Solution\nOne platform, four phases:\n1. Ideate: Capture & refine with AI\n2. Document: Auto-generate PRDs\n3. Execute: Visual task boards\n4. Ship: Integrated dev tools\n\n## Success Metrics\n- 50% reduction in tool switching\n- 2x faster from idea to first release\n- 90%+ user satisfaction",
-        scores: { clarity: 85, completeness: 70, feasibility: 75, alignment: 90 },
-      },
-      {
-        id: "doc-4",
-        title: "User Personas",
-        type: "prd",
-        status: "completed",
-        content:
-          "# User Personas\n\n## Persona 1: Indie Hacker Sarah\n- Age: 28, Solo developer\n- Goal: Ship side projects faster\n- Pain: Too many tools, limited budget\n- Needs: Simple, affordable, AI-assisted\n\n## Persona 2: Startup CTO Alex\n- Age: 35, Managing 5-person team\n- Goal: Align team on product vision\n- Pain: Context scattered across tools\n- Needs: Collaboration, visibility, integrations\n\n## Persona 3: Product Manager Chen\n- Age: 32, PM at small company\n- Goal: Clear requirements → execution\n- Pain: Misalignment between design & dev\n- Needs: Source of truth, version control",
-        scores: { clarity: 100, completeness: 100, feasibility: 100, alignment: 100 },
-      },
-    ],
-  },
-  {
-    id: "stage-3",
-    title: "User Experience",
-    nodes: [
-      {
-        id: "doc-5",
-        title: "User Flows",
-        type: "design",
-        status: "in-progress",
-        content:
-          "# Core User Flows\n\n## Flow 1: Idea to Doc (New User)\n1. Land on homepage → See value prop\n2. Click 'Start Free' → Sign up (email/Google)\n3. Onboarding: 'What are you building?'\n4. AI suggests structure → User refines\n5. Generate product brief → Preview & edit\n6. Save → Dashboard\n\n## Flow 2: Doc to Tasks\n1. Open product brief\n2. Click 'Create Tasks'\n3. AI extracts features → Suggests breakdown\n4. User reviews → Accepts/edits\n5. Tasks appear in Kanban board\n6. Assign → Set priority → Start work\n\n## Flow 3: Collaborative Review\n1. Share doc link → Teammate opens\n2. Inline comments → AI summarizes feedback\n3. Owner reviews → Accepts changes\n4. Update reflected in tasks automatically",
-        scores: { clarity: 80, completeness: 65, feasibility: 90, alignment: 85 },
-      },
-      {
-        id: "doc-6",
-        title: "Design Principles",
-        type: "design",
-        status: "pending",
-        content:
-          "# Design Principles\n\n## 1. Minimal Dense Layout (MDL)\n- Structure > Decoration\n- Table-like lists, not cards\n- Hover to expand, not click to modal\n\n## 2. Progressive Disclosure\n- Show essentials first\n- Details on hover/click\n- No overwhelming forms\n\n## 3. AI as Co-pilot\n- Suggest, don't dictate\n- Always editable\n- Transparent reasoning\n\n## 4. Speed Obsession\n- <100ms UI responses\n- Optimistic updates\n- Keyboard shortcuts everywhere\n\n## 5. Trust Through Clarity\n- Clear data ownership\n- Version history visible\n- Export anytime",
-        scores: { clarity: 60, completeness: 50, feasibility: 70, alignment: 80 },
-      },
-    ],
-  },
-  {
-    id: "stage-4",
-    title: "Go-to-Market",
-    nodes: [
-      {
-        id: "doc-7",
-        title: "Launch Strategy",
-        type: "idea",
-        status: "pending",
-        content:
-          "# Launch Strategy\n\n## Phase 1: Private Beta (Week 1-4)\n- 50 hand-picked users\n- Daily feedback loops\n- Iterate on onboarding\n\n## Phase 2: Public Beta (Week 5-8)\n- Product Hunt launch\n- Indie Hackers post\n- Twitter threads\n- Target: 500 signups\n\n## Phase 3: V1 Launch (Week 9-12)\n- Major feature complete\n- Case studies ready\n- Pricing finalized\n- Press outreach\n\n## Success Criteria\n- 1000 signups in Month 1\n- 20% activation rate\n- 5+ testimonials\n- $5K MRR by Month 3",
-        scores: { clarity: 75, completeness: 60, feasibility: 80, alignment: 90 },
-      },
-    ],
-  },
-];
+type StageFilter = "all" | "ideation" | "research" | "design" | "dev" | "launch";
 
 export default function CanvasPage() {
-  const initialDocId = undefined;
-  const [selectedDoc, setSelectedDoc] = useState<DocumentNode | null>(() => {
-    // If initialDocId is provided, find and open that document
-    if (initialDocId) {
-      const allDocs = PROJECT_STAGES.flatMap((s) => s.nodes);
-      return allDocs.find((doc) => doc.id === initialDocId) || null;
-    }
-    return null;
-  });
-  const [input, setInput] = useState("");
-  const [isThinking, setIsThinking] = useState(false);
-  const [chatHistory, setChatHistory] = useState<{ [key: string]: ChatMessage[] }>({}); // Chat history per doc
+  // Get node contents (without layout)
+  const nodeContents = getAllNodeContents();
 
-  // Canvas drag state
+  // Dynamic layout state
+  const [nodes, setNodes] = useState<CanvasNode[]>([]);
+  const nodeRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const [layoutCalculated, setLayoutCalculated] = useState(false);
+  const [zoneBounds, setZoneBounds] = useState<Record<string, { width: number; height: number }>>({});
+
+  const [selectedNode, setSelectedNode] = useState<CanvasNode | null>(null);
+  const [commentInput, setCommentInput] = useState("");
+  const [suggestions] = useState<AISuggestion[]>(MOCK_SUGGESTIONS);
+  const [stageFilter, setStageFilter] = useState<StageFilter>("all");
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+
+  // AI Chat state
+  const [showAIChat, setShowAIChat] = useState(false);
+  const [aiInput, setAiInput] = useState("");
+  const [aiChatHistory, setAiChatHistory] = useState<SimpleChatMessage[]>([]);
+
+  // Strategic zones always enabled
+  const showStrategicZones = true;
+
+  // Canvas pan and zoom state
   const canvasRef = useRef<HTMLDivElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [scrollPos, setScrollPos] = useState({ x: 0, y: 0 });
+  const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 });
+  const [scale, setScale] = useState(1);
 
-  const handleDocClick = (doc: DocumentNode) => {
-    setSelectedDoc(doc);
+  // Direct DOM manipulation refs for hybrid architecture
+  const transformRef = useRef({ x: 0, y: 0, scale: 1 });
+  const zonesContainerRef = useRef<HTMLDivElement>(null);
+  const linesContainerRef = useRef<SVGSVGElement>(null);
+  const nodesContainerRef = useRef<HTMLDivElement>(null);
+  const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleNodeClick = (node: CanvasNode, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedNode(node);
+    setShowAIChat(false); // Reset to document view when selecting a node
   };
 
   const handleClosePanel = () => {
-    setSelectedDoc(null);
+    setSelectedNode(null);
+    setShowAIChat(false); // Reset AI chat state when closing panel
   };
 
-  const getMessages = (docId: string) => {
-    return (
-      chatHistory[docId] || [
-        {
-          id: "system-1",
-          role: "assistant",
-          content: `I'm ready to discuss "${PROJECT_STAGES.flatMap((s) => s.nodes).find((n) => n.id === docId)?.title}". What would you like to know or change?`,
-        },
-      ]
-    );
+  const getFeedActivities = (nodeId: string): FeedActivity[] => {
+    return MOCK_FEED[nodeId] || [];
   };
 
-  const handleSend = () => {
-    if (!input.trim() || !selectedDoc) return;
-
-    const newMessage: ChatMessage = {
-      id: Date.now().toString(),
-      role: "user",
-      content: input,
-    };
-
-    setChatHistory((prev) => ({
-      ...prev,
-      [selectedDoc.id]: [...(prev[selectedDoc.id] || getMessages(selectedDoc.id)), newMessage],
-    }));
-
-    setInput("");
-    setIsThinking(true);
-
-    // Simulate AI Response
-    setTimeout(() => {
-      setIsThinking(false);
-      const aiResponse: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: `I've noted your feedback on ${selectedDoc.title}. " ${input} ". Updating the context...`,
-      };
-      setChatHistory((prev) => ({
-        ...prev,
-        [selectedDoc.id]: [...prev[selectedDoc.id], aiResponse],
-      }));
-    }, 1000);
+  const getComments = (nodeId: string): Comment[] => {
+    return MOCK_COMMENTS[nodeId] || [];
   };
 
-  // Canvas drag handlers
-  const handleMouseDown = (e: React.MouseEvent) => {
-    if (!canvasRef.current || selectedDoc) return;
-    setIsDragging(true);
-    setDragStart({
-      x: e.clientX - scrollPos.x,
-      y: e.clientY - scrollPos.y,
+  const handleAddComment = () => {
+    if (!commentInput.trim() || !selectedNode) return;
+    // In demo, just clear input
+    setCommentInput("");
+    // In real app, would add comment to backend
+  };
+
+  const handleOpenAIChat = (node: CanvasNode) => {
+    setSelectedNode(node);
+    setShowAIChat(true);
+    // Attach document reference to input
+    const reference = `📄 Reference Document: "${node.title}"\n\n`;
+    setAiInput(reference);
+  };
+
+  const handleSendAIMessage = () => {
+    if (!aiInput.trim()) return;
+    // In demo, just add to history
+    setAiChatHistory([...aiChatHistory, { role: "user", content: aiInput }]);
+    setAiInput("");
+    // In real app, would send to AI backend
+  };
+
+  // Handle node reference click [[node-id]]
+  const handleNodeReferenceClick = (nodeId: string) => {
+    const referencedNode = nodes.find((n) => n.id === nodeId);
+    if (referencedNode) {
+      setSelectedNode(referencedNode);
+      setShowAIChat(false);
+    }
+  };
+
+  // Process content to add clickable node references
+  const processContentWithReferences = (content: string) => {
+    // Replace [[node-id]] with clickable links
+    return content.replace(/\[\[([^\]]+)\]\]/g, (match, nodeId) => {
+      const referencedNode = nodes.find((n) => n.id === nodeId);
+      const title = referencedNode?.title || nodeId;
+      return `[📎 ${title}](#${nodeId})`;
     });
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging) return;
-    const newX = e.clientX - dragStart.x;
-    const newY = e.clientY - dragStart.y;
-    setScrollPos({ x: newX, y: newY });
+  // Canvas pan handlers
+  const handleCanvasMouseDown = (e: React.MouseEvent) => {
+    if (selectedNode) return;
+    setIsDragging(true);
+    setDragStart({ x: e.clientX - canvasOffset.x, y: e.clientY - canvasOffset.y });
   };
 
-  const handleMouseUp = () => {
+  const handleCanvasMouseMove = (e: React.MouseEvent) => {
+    if (isDragging) {
+      setCanvasOffset({
+        x: e.clientX - dragStart.x,
+        y: e.clientY - dragStart.y,
+      });
+    }
+  };
+
+  const handleCanvasMouseUp = () => {
     setIsDragging(false);
   };
 
-  useEffect(() => {
-    const handleGlobalMouseUp = () => setIsDragging(false);
-    window.addEventListener("mouseup", handleGlobalMouseUp);
-    return () => window.removeEventListener("mouseup", handleGlobalMouseUp);
+  // Debounced sync: Update React state after scrolling stops
+  const syncStateDebounced = useCallback(() => {
+    if (syncTimeoutRef.current) {
+      clearTimeout(syncTimeoutRef.current);
+    }
+    syncTimeoutRef.current = setTimeout(() => {
+      setCanvasOffset({ x: transformRef.current.x, y: transformRef.current.y });
+      setScale(transformRef.current.scale);
+    }, 150);
   }, []);
 
-  const _totalDocs = PROJECT_STAGES.flatMap((s) => s.nodes).length;
-  const _completedDocs = PROJECT_STAGES.flatMap((s) => s.nodes).filter(
-    (n) => n.status === "completed",
-  ).length;
+  // Direct DOM update helper
+  const updateTransform = useCallback(() => {
+    const transform = `translate(${transformRef.current.x}px, ${transformRef.current.y}px) scale(${transformRef.current.scale})`;
+    if (zonesContainerRef.current) {
+      zonesContainerRef.current.style.transform = transform;
+    }
+    if (linesContainerRef.current) {
+      linesContainerRef.current.style.transform = transform;
+    }
+    if (nodesContainerRef.current) {
+      nodesContainerRef.current.style.transform = transform;
+    }
+  }, []);
+
+  // Calculate layout dynamically after nodes are rendered
+  useEffect(() => {
+    if (layoutCalculated) return;
+
+    // Initial render: set nodes with temporary positions (off-screen for measurement)
+    if (nodes.length === 0) {
+      const tempNodes = nodeContents.map((content) => ({
+        ...content,
+        position: { x: -9999, y: -9999 }, // Off-screen for measurement
+      }));
+      setNodes(tempNodes);
+      return;
+    }
+
+    // Wait for next frame to ensure DOM is updated
+    requestAnimationFrame(() => {
+      // Calculate actual layout based on measured heights
+      const calculatedNodes: CanvasNode[] = [];
+      const calculatedZoneBounds: Record<string, { width: number; height: number }> = {};
+
+      // Helper to get node depth
+      const getNodeDepth = (nodeId: string): number => {
+        const node = nodeContents.find((n) => n.id === nodeId);
+        if (!node?.parentId) return 0;
+        return 1 + getNodeDepth(node.parentId);
+      };
+
+      // Track max height across all zones
+      let globalMaxHeight = 0;
+
+      // Process each zone
+      for (const [zoneName, config] of Object.entries(ZONE_CONFIGS)) {
+        const currentYInColumn: number[] = Array(config.columnCount).fill(90); // Top padding for zone header (label + spacing)
+
+        config.nodeIds.forEach((nodeId) => {
+          const content = nodeContents.find((n) => n.id === nodeId);
+          if (!content) return;
+
+          // Find the shortest column to place the next node (greedy algorithm for better balance)
+          const currentColumn = currentYInColumn.indexOf(Math.min(...currentYInColumn));
+          const x = config.startX + currentColumn * (NODE_WIDTH + COLUMN_GAP);
+          const y = currentYInColumn[currentColumn];
+
+          // Get measured height from DOM
+          const nodeElement = nodeRefs.current.get(nodeId);
+          const actualHeight = nodeElement?.offsetHeight || 250; // Fallback to estimated height (increased for better initial balance)
+
+          calculatedNodes.push({
+            ...content,
+            position: { x, y },
+          });
+
+          // Update column Y position with actual height + gap
+          currentYInColumn[currentColumn] += actualHeight + VERTICAL_GAP;
+        });
+
+        // Calculate zone bounds based on actual content
+        const maxHeight = Math.max(...currentYInColumn);
+        const zoneWidth = config.columnCount * NODE_WIDTH + (config.columnCount - 1) * COLUMN_GAP + 40; // +40 for padding
+
+        calculatedZoneBounds[zoneName] = {
+          width: zoneWidth,
+          height: maxHeight + 40, // +40 for bottom padding
+        };
+
+        // Track global max height
+        globalMaxHeight = Math.max(globalMaxHeight, maxHeight + 40);
+      }
+
+      // Apply uniform height to all zones (use the tallest zone's height)
+      for (const zoneName of Object.keys(calculatedZoneBounds)) {
+        calculatedZoneBounds[zoneName].height = globalMaxHeight;
+      }
+
+      setNodes(calculatedNodes);
+      setZoneBounds(calculatedZoneBounds);
+      setLayoutCalculated(true);
+    });
+  }, [nodes, nodeContents, layoutCalculated]);
+
+  useEffect(() => {
+    const handleGlobalMouseUp = () => {
+      setIsDragging(false);
+    };
+    window.addEventListener("mouseup", handleGlobalMouseUp);
+    return () => {
+      window.removeEventListener("mouseup", handleGlobalMouseUp);
+    };
+  }, []);
+
+  // Initialize transformRef from React state
+  useEffect(() => {
+    transformRef.current.x = canvasOffset.x;
+    transformRef.current.y = canvasOffset.y;
+    transformRef.current.scale = scale;
+  }, [canvasOffset.x, canvasOffset.y, scale]);
+
+  // Register native wheel listener to avoid passive listener warning
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const handleNativeWheel = (e: WheelEvent) => {
+      e.preventDefault();
+
+      // Cmd/Ctrl + scroll for zoom
+      if (e.metaKey || e.ctrlKey) {
+        const delta = e.deltaY > 0 ? 0.9 : 1.1;
+        transformRef.current.scale = Math.min(Math.max(transformRef.current.scale * delta, 0.5), 2);
+      } else {
+        // Default scroll for panning
+        transformRef.current.x -= e.deltaX;
+        transformRef.current.y -= e.deltaY;
+      }
+
+      // Direct DOM update
+      updateTransform();
+
+      // Sync React state after scroll stops
+      syncStateDebounced();
+    };
+
+    canvas.addEventListener('wheel', handleNativeWheel, { passive: false });
+
+    return () => {
+      canvas.removeEventListener('wheel', handleNativeWheel);
+    };
+  }, [updateTransform, syncStateDebounced]);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Node type config
+  const nodeTypeConfig = {
+    document: {
+      icon: FileText,
+      color: "bg-blue-500",
+      label: "Document",
+      emoji: "📄",
+    },
+    task: {
+      icon: CheckSquare,
+      color: "bg-gray-500",
+      label: "Task",
+      emoji: "☑️",
+    },
+    idea: {
+      icon: Lightbulb,
+      color: "bg-yellow-500",
+      label: "Idea",
+      emoji: "💡",
+    },
+    agent: {
+      icon: Bot,
+      color: "bg-purple-500",
+      label: "Agent",
+      emoji: "🤖",
+    },
+  };
+
+  // Build hierarchy
+  const getNodeDepth = (nodeId: string): number => {
+    const node = nodes.find((n) => n.id === nodeId);
+    if (!node?.parentId) return 0;
+    return 1 + getNodeDepth(node.parentId);
+  };
+
+  // All nodes are always visible (no collapse functionality)
+  const visibleNodes = nodes;
+
+  // Helper to check if node matches current filter
+  const matchesFilter = (node: CanvasNode): boolean => {
+    if (stageFilter === "all") return true;
+    return node.tags.some((tag) => tag === `stage/${stageFilter}`);
+  };
 
   return (
     <div className="h-full w-full flex flex-col bg-background overflow-hidden">
@@ -240,314 +387,1062 @@ export default function CanvasPage() {
           <SidebarToggle />
           <Separator orientation="vertical" className="h-4" />
           <Sparkles className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-medium">Strategy Canvas</span>
+          <span className="text-sm font-medium">Project Canvas</span>
         </div>
-        <div className="text-xs text-muted-foreground">Click any document to view & discuss</div>
+
+        <div className="flex items-center gap-2">
+          {/* AI Suggestions Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm">
+                <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                AI Suggestions
+                {suggestions.length > 0 && (
+                  <Badge variant="secondary" className="ml-1.5 h-4 px-1 text-[10px]">
+                    {suggestions.length}
+                  </Badge>
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-80">
+              <div className="p-3 border-b">
+                <h3 className="text-sm font-medium flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-primary" />
+                  AI Smart Suggestions
+                </h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Scanned {nodes.length} nodes
+                </p>
+              </div>
+              <ScrollArea className="max-h-[400px]">
+                <div className="p-2 space-y-2">
+                  {suggestions.map((suggestion) => (
+                    <div
+                      key={suggestion.id}
+                      className="p-3 bg-muted/50 rounded-lg hover:bg-muted transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-1">
+                        <p className="text-xs font-medium">{suggestion.title}</p>
+                        <Badge variant="secondary" className="text-[10px] shrink-0">
+                          {suggestion.type === "add-node" && "Add"}
+                          {suggestion.type === "add-tag" && "Tag"}
+                          {suggestion.type === "refine-content" && "Refine"}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground leading-relaxed mb-2">
+                        {suggestion.description}
+                      </p>
+                      <div className="flex gap-1.5">
+                        <Button size="sm" variant="outline" className="h-6 text-xs flex-1">
+                          Accept
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-6 text-xs px-2">
+                          Dismiss
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </header>
 
-      {/* Canvas Area - Draggable */}
-      <div
-        ref={canvasRef}
-        className="flex-1 overflow-hidden relative"
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onClick={() => setSelectedDoc(null)}
-        style={{ cursor: isDragging ? "grabbing" : "grab" }}
-      >
+      <div className="flex-1 flex overflow-hidden">
+        {/* Canvas Area */}
         <div
-          className="absolute inset-0 flex items-center justify-center"
-          style={{
-            transform: `translate(${scrollPos.x}px, ${scrollPos.y}px)`,
-            transition: isDragging ? "none" : "transform 0.1s ease-out",
-          }}
+          ref={canvasRef}
+          className="flex-1 overflow-hidden relative bg-muted/5"
+          onMouseDown={handleCanvasMouseDown}
+          onMouseMove={handleCanvasMouseMove}
+          onMouseUp={handleCanvasMouseUp}
+          onClick={() => setSelectedNode(null)}
+          style={{ cursor: isDragging ? "grabbing" : "grab" }}
         >
-          <div className="flex gap-6 items-center">
-            {PROJECT_STAGES.map((stage, index) => (
-              <div key={stage.id} className="flex items-center gap-6">
-                {/* Stage Column */}
-                <div className="flex flex-col gap-3">
-                  {/* Stage Title */}
-                  <div className="text-center mb-2">
-                    <h3 className="text-xs font-medium text-muted-foreground">{stage.title}</h3>
+          {/* Strategic Zones Background */}
+          {showStrategicZones && (
+            <div
+              ref={zonesContainerRef}
+              className="absolute pointer-events-none"
+              style={{
+                left: 0,
+                top: 0,
+                width: "4000px",
+                height: "3000px",
+                transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px) scale(${scale})`,
+                transformOrigin: "0 0",
+                willChange: "transform",
+              }}
+            >
+              {/* Ideation Zone */}
+              {layoutCalculated && (
+                <div
+                  className="absolute border-2 border-dashed border-yellow-500/20 bg-yellow-500/5 rounded-2xl transition-all duration-300"
+                  style={{
+                    left: ZONE_CONFIGS.ideation.startX - 20,
+                    top: 20,
+                    width: zoneBounds.ideation?.width || 800,
+                    height: zoneBounds.ideation?.height || 800
+                  }}
+                >
+                  <div className="absolute top-3 left-4 text-sm font-medium text-yellow-600/60 px-3 py-1.5 bg-yellow-500/10 rounded-lg inline-block backdrop-blur-sm">
+                    💡 Ideation
+                  </div>
+                </div>
+              )}
+
+              {/* Design Zone */}
+              {layoutCalculated && (
+                <div
+                  className="absolute border-2 border-dashed border-blue-500/20 bg-blue-500/5 rounded-2xl transition-all duration-300"
+                  style={{
+                    left: ZONE_CONFIGS.design.startX - 20,
+                    top: 20,
+                    width: zoneBounds.design?.width || 800,
+                    height: zoneBounds.design?.height || 800
+                  }}
+                >
+                  <div className="absolute top-3 left-4 text-sm font-medium text-blue-600/60 px-3 py-1.5 bg-blue-500/10 rounded-lg inline-block backdrop-blur-sm">
+                    📋 Design
+                  </div>
+                </div>
+              )}
+
+              {/* Development Zone */}
+              {layoutCalculated && (
+                <div
+                  className="absolute border-2 border-dashed border-green-500/20 bg-green-500/5 rounded-2xl transition-all duration-300"
+                  style={{
+                    left: ZONE_CONFIGS.dev.startX - 20,
+                    top: 20,
+                    width: zoneBounds.dev?.width || 800,
+                    height: zoneBounds.dev?.height || 800
+                  }}
+                >
+                  <div className="absolute top-3 left-4 text-sm font-medium text-green-600/60 px-3 py-1.5 bg-green-500/10 rounded-lg inline-block backdrop-blur-sm">
+                    ⚙️ Development
+                  </div>
+                </div>
+              )}
+
+              {/* Launch Zone */}
+              {layoutCalculated && (
+                <div
+                  className="absolute border-2 border-dashed border-purple-500/20 bg-purple-500/5 rounded-2xl transition-all duration-300"
+                  style={{
+                    left: ZONE_CONFIGS.launch.startX - 20,
+                    top: 20,
+                    width: zoneBounds.launch?.width || 800,
+                    height: zoneBounds.launch?.height || 800
+                  }}
+                >
+                  <div className="absolute top-3 left-4 text-sm font-medium text-purple-600/60 px-3 py-1.5 bg-purple-500/10 rounded-lg inline-block backdrop-blur-sm">
+                    🚀 Launch
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Grid background */}
+          <div
+            className="absolute inset-0 opacity-20 pointer-events-none"
+            style={{
+              backgroundImage:
+                "radial-gradient(circle, currentColor 1px, transparent 1px)",
+              backgroundSize: "20px 20px",
+            }}
+          />
+
+          {/* Connection lines */}
+          <svg
+            ref={linesContainerRef}
+            className="absolute pointer-events-none"
+            style={{
+              left: 0,
+              top: 0,
+              width: "4000px",
+              height: "4000px",
+              transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px) scale(${scale})`,
+              transformOrigin: "0 0",
+              overflow: "visible",
+              willChange: "transform",
+            }}
+          >
+            {/* Arrow and circle marker definitions */}
+            <defs>
+              <marker
+                id="arrowhead"
+                markerWidth="10"
+                markerHeight="10"
+                refX="9"
+                refY="3"
+                orient="auto"
+                markerUnits="strokeWidth"
+              >
+                <path d="M0,0 L0,6 L9,3 z" fill="#3b82f6" opacity="0.6" />
+              </marker>
+              <marker
+                id="circle-start"
+                markerWidth="8"
+                markerHeight="8"
+                refX="4"
+                refY="4"
+                markerUnits="strokeWidth"
+              >
+                <circle cx="4" cy="4" r="3" fill="#3b82f6" opacity="0.6" />
+              </marker>
+            </defs>
+
+            {(() => {
+              // Orthogonal routing algorithm
+              const nodeWidth = 320;
+              const nodeHeight = 160; // Estimated average node height
+              const padding = 20; // Padding around nodes
+              const routingGap = 40; // Gap for routing channels
+
+              // Helper: Check if two rectangles overlap
+              const rectOverlaps = (r1: { x: number; y: number; w: number; h: number }, r2: { x: number; y: number; w: number; h: number }) => {
+                return !(r1.x + r1.w < r2.x || r2.x + r2.w < r1.x || r1.y + r1.h < r2.y || r2.y + r2.h < r1.y);
+              };
+
+              // Helper: Check if a line segment intersects any node
+              const lineIntersectsNodes = (x1: number, y1: number, x2: number, y2: number, excludeIds: string[]) => {
+                for (const checkNode of visibleNodes) {
+                  if (excludeIds.includes(checkNode.id)) continue;
+                  const depth = getNodeDepth(checkNode.id);
+                  const nodeRect = {
+                    x: checkNode.position.x + depth * 20 - padding,
+                    y: checkNode.position.y - padding,
+                    w: nodeWidth + padding * 2,
+                    h: nodeHeight + padding * 2,
+                  };
+                  // Check if vertical line intersects
+                  if (x1 === x2 && x1 >= nodeRect.x && x1 <= nodeRect.x + nodeRect.w) {
+                    const minY = Math.min(y1, y2);
+                    const maxY = Math.max(y1, y2);
+                    if (!(maxY < nodeRect.y || minY > nodeRect.y + nodeRect.h)) {
+                      return true;
+                    }
+                  }
+                  // Check if horizontal line intersects
+                  if (y1 === y2 && y1 >= nodeRect.y && y1 <= nodeRect.y + nodeRect.h) {
+                    const minX = Math.min(x1, x2);
+                    const maxX = Math.max(x1, x2);
+                    if (!(maxX < nodeRect.x || minX > nodeRect.x + nodeRect.w)) {
+                      return true;
+                    }
+                  }
+                }
+                return false;
+              };
+
+              return visibleNodes.map((node) => {
+                if (!node.parentId) return null;
+                const parent = nodes.find((n) => n.id === node.parentId);
+                if (!parent) return null;
+
+                const depth = getNodeDepth(node.id);
+                const parentDepth = getNodeDepth(parent.id);
+
+                // Check if nodes are in the same vertical zone
+                const isSameZone = Math.abs(parent.position.x - node.position.x) < 200;
+
+                let pathD: string;
+
+                if (showStrategicZones && isSameZone) {
+                  // Vertical connection for same zone - use smart routing
+                  const startX = parent.position.x + parentDepth * 20 + nodeWidth / 2;
+                  const startY = parent.position.y + 160; // bottom of parent card
+                  const endX = node.position.x + depth * 20 + nodeWidth / 2;
+                  const endY = node.position.y; // top of child card
+
+                  // Calculate waypoints to avoid nodes
+                  const midY = (startY + endY) / 2;
+
+                  // Check if direct vertical path is blocked
+                  const directBlocked = lineIntersectsNodes(startX, startY, startX, endY, [node.id, parent.id]);
+
+                  if (!directBlocked && Math.abs(startX - endX) < 20) {
+                    // Direct vertical path if nodes are almost aligned
+                    pathD = `M ${startX} ${startY} L ${startX} ${endY}`;
+                  } else {
+                    // Z-shaped path with intelligent midpoint
+                    // Offset midpoint based on column to reduce crossing
+                    const columnOffset = (startX % 100) * 0.5; // Slight horizontal offset based on column position
+                    const offsetMidY = midY + columnOffset;
+                    pathD = `M ${startX} ${startY} L ${startX} ${offsetMidY} L ${endX} ${offsetMidY} L ${endX} ${endY}`;
+                  }
+                } else {
+                  // Horizontal connection for cross-zone - use smart routing
+                  const startX = parent.position.x + parentDepth * 20 + nodeWidth;
+                  const startY = parent.position.y + 80; // middle of node height
+                  const endX = node.position.x + depth * 20;
+                  const endY = node.position.y + 80;
+
+                  // Calculate routing channel
+                  const isGoingRight = endX > startX;
+                  const isGoingDown = endY > startY;
+
+                  // Use multiple waypoints to route around obstacles
+                  const exitX = startX + routingGap;
+                  const entryX = endX - routingGap;
+
+                  // Check if path needs vertical offset to avoid nodes
+                  const midX = (exitX + entryX) / 2;
+                  const needsOffset = lineIntersectsNodes(exitX, startY, entryX, startY, [node.id, parent.id]);
+
+                  if (needsOffset) {
+                    // Route with vertical offset to avoid obstacles
+                    const verticalOffset = isGoingDown ? Math.min(60, Math.abs(endY - startY) / 2) : -60;
+                    const offsetY = startY + verticalOffset;
+                    pathD = `M ${startX} ${startY} L ${exitX} ${startY} L ${exitX} ${offsetY} L ${entryX} ${offsetY} L ${entryX} ${endY} L ${endX} ${endY}`;
+                  } else if (Math.abs(endY - startY) < 20) {
+                    // Nearly horizontal - simple path
+                    pathD = `M ${startX} ${startY} L ${endX} ${endY}`;
+                  } else {
+                    // Standard L-shaped or Z-shaped path
+                    pathD = `M ${startX} ${startY} L ${midX} ${startY} L ${midX} ${endY} L ${endX} ${endY}`;
+                  }
+                }
+
+                // Dim lines for non-matching nodes
+                const isHighlighted = matchesFilter(node) && matchesFilter(parent);
+                const lineOpacity = isHighlighted ? 1 : 0.2;
+
+                return (
+                  <g key={`line-${node.id}`}>
+                    {/* Connection line with smooth appearance */}
+                    <path
+                      d={pathD}
+                      stroke="#3b82f6"
+                      strokeWidth="2"
+                      fill="none"
+                      opacity={0.4 * lineOpacity}
+                      strokeLinecap="round"
+                      markerStart="url(#circle-start)"
+                      markerEnd="url(#arrowhead)"
+                    />
+                    {/* Animated dashed line overlay */}
+                    <path
+                      d={pathD}
+                      stroke="#3b82f6"
+                      strokeWidth="1.5"
+                      fill="none"
+                      opacity={0.6 * lineOpacity}
+                      strokeDasharray="4 4"
+                      strokeLinecap="round"
+                    />
+                  </g>
+                );
+              });
+            })()}
+          </svg>
+
+          {/* Nodes */}
+          <div
+            ref={nodesContainerRef}
+            className="absolute inset-0"
+            style={{
+              transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px) scale(${scale})`,
+              transformOrigin: "0 0",
+              willChange: "transform",
+            }}
+          >
+            {visibleNodes.map((node) => {
+              const config = nodeTypeConfig[node.type];
+              const Icon = config.icon;
+              const depth = getNodeDepth(node.id);
+              const hasChildren = node.children && node.children.length > 0;
+              const isMatching = matchesFilter(node);
+              const isHighlighted = stageFilter === "all" || isMatching;
+
+              return (
+                <div
+                  key={node.id}
+                  ref={(el) => {
+                    if (el) {
+                      nodeRefs.current.set(node.id, el);
+                    }
+                  }}
+                  className={cn(
+                    "absolute w-80 p-4 bg-background border-2 rounded-xl shadow-sm cursor-pointer group select-none",
+                    "transition-all duration-300 ease-out",
+                    selectedNode?.id === node.id
+                      ? "border-primary shadow-lg scale-105 z-10"
+                      : isHighlighted
+                        ? "border-border hover:border-primary/50 hover:shadow-md"
+                        : "border-border/30 opacity-40 hover:opacity-60",
+                    // Animate child nodes appearance
+                    depth > 0 && "animate-in fade-in-0 slide-in-from-left-2 duration-200",
+                  )}
+                  style={{
+                    left: node.position.x,
+                    top: node.position.y,
+                    userSelect: "none",
+                  }}
+                  onClick={(e) => handleNodeClick(node, e)}
+                >
+                  {/* Header */}
+                  <div className="flex items-start gap-2 mb-3">
+                    <div
+                      className={cn(
+                        "p-2 rounded-lg shrink-0",
+                        config.color.replace("bg-", "bg-") + "/10",
+                      )}
+                    >
+                      <Icon className={cn("h-4 w-4", config.color.replace("bg-", "text-"))} />
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-medium text-sm leading-snug mb-1">{node.title}</h3>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <Badge variant="secondary" className="text-[10px] font-normal">
+                          {config.emoji} {config.label}
+                        </Badge>
+                        {node.type === "agent" && (
+                          <Badge variant="outline" className="text-[10px] font-normal">
+                            AI Generated
+                          </Badge>
+                        )}
+                        {hasChildren && (
+                          <Badge
+                            variant="outline"
+                            className="text-[10px] font-normal bg-primary/5 text-primary border-primary/20"
+                          >
+                            {node.children!.length} children
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <MoreHorizontal className="h-3.5 w-3.5" />
+                    </Button>
                   </div>
 
-                  {/* Document Cards */}
-                  <div className="flex flex-col gap-2">
-                    {stage.nodes.map((node) => {
-                      const statusColors = {
-                        completed: "bg-green-500",
-                        "in-progress": "bg-yellow-500",
-                        pending: "bg-muted-foreground/30",
-                      };
-                      const typeColors = {
-                        idea: "bg-blue-500",
-                        prd: "bg-purple-500",
-                        design: "bg-pink-500",
-                        code: "bg-green-500",
-                      };
-
-                      // Calculate overall score
-                      const isPerfect = Object.values(node.scores).every((score) => score === 100);
-                      const avgScore = Object.values(node.scores).reduce((a, b) => a + b, 0) / 4;
-
-                      return (
+                  {/* Type-specific content */}
+                  {node.type === "task" && (
+                    <div className="mb-3 space-y-2">
+                      <div className="flex items-center gap-2 text-xs">
                         <div
-                          key={node.id}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDocClick(node);
-                          }}
-                          onMouseDown={(e) => e.stopPropagation()}
                           className={cn(
-                            "w-64 p-3 border rounded-lg cursor-pointer transition-all group",
-                            selectedDoc?.id === node.id
-                              ? "border-primary bg-primary/5"
-                              : "border-border hover:bg-muted/40",
-                            // Dim perfect scores
-                            isPerfect && "opacity-50 hover:opacity-100",
+                            "px-2 py-0.5 rounded text-[10px] font-medium",
+                            node.taskStatus === "done" && "bg-green-500/10 text-green-600",
+                            node.taskStatus === "in-progress" &&
+                              "bg-blue-500/10 text-blue-600",
+                            node.taskStatus === "todo" && "bg-gray-500/10 text-gray-600",
                           )}
                         >
-                          {/* Header */}
-                          <div className="flex items-center gap-2 mb-2">
-                            <div
-                              className={cn("h-1.5 w-1.5 rounded-full", typeColors[node.type])}
-                            />
-                            <span className="text-xs text-muted-foreground capitalize">
-                              {node.type}
-                            </span>
-                            <div className="flex-1" />
-                            {isPerfect ? (
-                              <span className="text-[10px] text-green-600 font-medium">
-                                ✓ Perfect
-                              </span>
-                            ) : (
-                              <span className="text-[10px] text-muted-foreground font-mono">
-                                {Math.round(avgScore)}%
-                              </span>
-                            )}
-                            <div
-                              className={cn(
-                                "h-1.5 w-1.5 rounded-full",
-                                statusColors[node.status],
-                                node.status === "in-progress" && "animate-pulse",
-                              )}
-                            />
-                          </div>
-
-                          {/* Title */}
-                          <p className="text-sm font-medium group-hover:text-primary transition-colors">
-                            {node.title}
-                          </p>
+                          {node.taskStatus === "done" && "✓ 已完成"}
+                          {node.taskStatus === "in-progress" && "⟳ 进行中"}
+                          {node.taskStatus === "todo" && "○ 待开始"}
                         </div>
+                        {node.assignee && (
+                          <div className="flex items-center gap-1 text-muted-foreground">
+                            <User className="h-3 w-3" />
+                            {node.assignee}
+                          </div>
+                        )}
+                      </div>
+                      {node.dueDate && (
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <Calendar className="h-3 w-3" />
+                          截止 {node.dueDate}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {node.type === "agent" && (
+                    <div className="mb-3 p-2 bg-purple-500/5 border border-purple-500/20 rounded-lg">
+                      <div className="flex items-center gap-1.5 text-xs text-purple-600 dark:text-purple-400">
+                        <Bot className="h-3 w-3" />
+                        <span className="font-medium">由 {node.agentName} 生成</span>
+                      </div>
+                      {node.generatedAt && (
+                        <div className="flex items-center gap-1 text-[10px] text-muted-foreground mt-1">
+                          <Clock className="h-2.5 w-2.5" />
+                          {node.generatedAt}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {node.type === "idea" && (
+                    <div className="mb-3 p-2 bg-yellow-500/5 border border-yellow-500/20 rounded-lg">
+                      <p className="text-xs text-yellow-700 dark:text-yellow-500">
+                        💡 早期想法，待验证
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Content Preview */}
+                  <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed mb-3">
+                    {node.content.replace(/[#*]/g, "").trim()}
+                  </p>
+
+                  {/* Tags */}
+                  {node.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {node.tags.slice(0, 3).map((tag) => {
+                        const [namespace, value] = tag.split("/");
+                        const tagColors: Record<string, string> = {
+                          type: "bg-blue-500/10 text-blue-600",
+                          stage: "bg-green-500/10 text-green-600",
+                          priority: "bg-orange-500/10 text-orange-600",
+                        };
+
+                        return (
+                          <div
+                            key={tag}
+                            className={cn(
+                              "inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium",
+                              tagColors[namespace] || "bg-muted text-muted-foreground",
+                            )}
+                          >
+                            <Tag className="h-2.5 w-2.5" />
+                            {value}
+                          </div>
+                        );
+                      })}
+                      {node.tags.length > 3 && (
+                        <div className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground">
+                          +{node.tags.length - 3}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Hover Actions */}
+                  <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex gap-1 bg-background border border-border rounded-lg shadow-lg p-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 text-xs"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenAIChat(node);
+                        }}
+                      >
+                        <Sparkles className="h-3 w-3 mr-1" />
+                        CrossMind
+                      </Button>
+                      <Separator orientation="vertical" className="h-6" />
+                      <Button variant="ghost" size="sm" className="h-6 text-xs">
+                        Add Child
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Canvas Controls */}
+          <div className="absolute bottom-4 left-4 flex flex-col gap-2">
+            {/* Zoom controls */}
+            <div className="bg-background border border-border rounded-lg shadow-lg p-2">
+              <div className="flex gap-1 items-center">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7"
+                  onClick={() => setScale((s) => Math.min(s * 1.2, 2))}
+                >
+                  +
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7"
+                  onClick={() => setScale((s) => Math.max(s * 0.8, 0.5))}
+                >
+                  −
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7"
+                  onClick={() => {
+                    setScale(1);
+                    setCanvasOffset({ x: 0, y: 0 });
+                  }}
+                >
+                  Reset
+                </Button>
+                <Separator orientation="vertical" className="h-4 mx-1" />
+                <div className="text-xs text-muted-foreground px-2">
+                  {stageFilter === "all"
+                    ? `${visibleNodes.length} nodes`
+                    : `${visibleNodes.filter(matchesFilter).length} / ${visibleNodes.length} nodes`}{" "}
+                  • {Math.round(scale * 100)}%
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Stage Filter - Top Left */}
+          <div className="absolute top-4 left-4 bg-background/90 backdrop-blur border border-border rounded-lg shadow-lg">
+            <DropdownMenu open={isFilterOpen} onOpenChange={setIsFilterOpen}>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="h-9 px-3">
+                  <Tag className="h-3.5 w-3.5 mr-1.5" />
+                  {stageFilter === "all" && "All Stages"}
+                  {stageFilter === "ideation" && "💡 Ideation"}
+                  {stageFilter === "research" && "🔍 Research"}
+                  {stageFilter === "design" && "📋 Design"}
+                  {stageFilter === "dev" && "⚙️ Development"}
+                  {stageFilter === "launch" && "🚀 Launch"}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-48">
+                <div className="p-1 space-y-0.5">
+                  <Button
+                    variant={stageFilter === "all" ? "secondary" : "ghost"}
+                    size="sm"
+                    className="w-full justify-start h-8 text-xs"
+                    onClick={() => {
+                      setStageFilter("all");
+                      setIsFilterOpen(false);
+                    }}
+                  >
+                    All Stages
+                  </Button>
+                  <Button
+                    variant={stageFilter === "ideation" ? "secondary" : "ghost"}
+                    size="sm"
+                    className="w-full justify-start h-8 text-xs"
+                    onClick={() => {
+                      setStageFilter("ideation");
+                      setIsFilterOpen(false);
+                    }}
+                  >
+                    💡 Ideation
+                  </Button>
+                  <Button
+                    variant={stageFilter === "research" ? "secondary" : "ghost"}
+                    size="sm"
+                    className="w-full justify-start h-8 text-xs"
+                    onClick={() => {
+                      setStageFilter("research");
+                      setIsFilterOpen(false);
+                    }}
+                  >
+                    🔍 Research
+                  </Button>
+                  <Button
+                    variant={stageFilter === "design" ? "secondary" : "ghost"}
+                    size="sm"
+                    className="w-full justify-start h-8 text-xs"
+                    onClick={() => {
+                      setStageFilter("design");
+                      setIsFilterOpen(false);
+                    }}
+                  >
+                    📋 Design
+                  </Button>
+                  <Button
+                    variant={stageFilter === "dev" ? "secondary" : "ghost"}
+                    size="sm"
+                    className="w-full justify-start h-8 text-xs"
+                    onClick={() => {
+                      setStageFilter("dev");
+                      setIsFilterOpen(false);
+                    }}
+                  >
+                    ⚙️ Development
+                  </Button>
+                  <Button
+                    variant={stageFilter === "launch" ? "secondary" : "ghost"}
+                    size="sm"
+                    className="w-full justify-start h-8 text-xs"
+                    onClick={() => {
+                      setStageFilter("launch");
+                      setIsFilterOpen(false);
+                    }}
+                  >
+                    🚀 Launch
+                  </Button>
+                </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+        </div>
+
+        {/* Right Panel */}
+        {selectedNode && (
+          <div
+            className="w-[600px] flex flex-col bg-background border-l border-border shadow-2xl shrink-0 animate-in slide-in-from-right duration-300"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b shrink-0 bg-muted/10">
+              <div className="flex items-center gap-3">
+                <div
+                  className={cn(
+                    "p-2 rounded-lg",
+                    nodeTypeConfig[selectedNode.type].color.replace("bg-", "bg-") + "/10",
+                  )}
+                >
+                  {React.createElement(nodeTypeConfig[selectedNode.type].icon, {
+                    className: cn(
+                      "h-4 w-4",
+                      nodeTypeConfig[selectedNode.type].color.replace("bg-", "text-"),
+                    ),
+                  })}
+                </div>
+                <div>
+                  <h2 className="font-semibold text-sm">{selectedNode.title}</h2>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <Badge variant="secondary" className="text-[10px]">
+                      {nodeTypeConfig[selectedNode.type].emoji}{" "}
+                      {nodeTypeConfig[selectedNode.type].label}
+                    </Badge>
+                    {selectedNode.tags.slice(0, 2).map((tag) => {
+                      const [, value] = tag.split("/");
+                      return (
+                        <span key={tag} className="text-[10px] text-muted-foreground">
+                          #{value}
+                        </span>
                       );
                     })}
                   </div>
                 </div>
-
-                {/* Connection Arrow - 连接两个阶段的中心点 */}
-                {index < PROJECT_STAGES.length - 1 && (
-                  <div className="shrink-0">
-                    <svg width="24" height="8" viewBox="0 0 24 8" className="text-border">
-                      <path
-                        d="M0 4 L18 4 L14 1 M18 4 L14 7"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                        fill="none"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </div>
-                )}
               </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Right Panel (Sheet/Overlay) */}
-      {selectedDoc && (
-        <div
-          className="absolute top-0 right-0 h-full w-full md:w-[600px] lg:w-[800px] bg-background border-l border-border shadow-2xl z-20 flex flex-col animate-in slide-in-from-right duration-300"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="flex items-center justify-between p-4 border-b shrink-0 bg-muted/10">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-primary/10 rounded-md">
-                <FileText className="h-4 w-4 text-primary" />
-              </div>
-              <div>
-                <h2 className="font-semibold text-sm">{selectedDoc.title}</h2>
-                <p className="text-xs text-muted-foreground capitalize">
-                  {selectedDoc.type} • {selectedDoc.status}
-                </p>
-              </div>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleClosePanel();
-              }}
-              className="h-8 w-8"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-
-          <div className="flex-1 flex overflow-hidden">
-            {/* Document Preview */}
-            <div className="flex-1 p-6 overflow-y-auto border-r border-border/40 bg-card/30">
-              {/* Quality Scores */}
-              <div className="mb-6 p-4 bg-background/60 border border-border/50 rounded-lg">
-                <h3 className="text-xs font-medium text-muted-foreground mb-3 flex items-center gap-2">
-                  <div className="h-1 w-1 rounded-full bg-primary" />
-                  Quality Metrics
-                </h3>
-                <div className="space-y-3">
-                  {Object.entries(selectedDoc.scores).map(([key, value]) => {
-                    const barColors = {
-                      100: "bg-green-500",
-                      high: "bg-blue-500", // 80-99
-                      medium: "bg-yellow-500", // 60-79
-                      low: "bg-orange-500", // <60
-                    };
-                    const getColor = (score: number) => {
-                      if (score === 100) return barColors[100];
-                      if (score >= 80) return barColors.high;
-                      if (score >= 60) return barColors.medium;
-                      return barColors.low;
-                    };
-
-                    const labels: Record<string, string> = {
-                      clarity: "清晰度",
-                      completeness: "完整性",
-                      feasibility: "可行性",
-                      alignment: "对齐度",
-                    };
-
-                    return (
-                      <div key={key} className="flex items-center gap-3">
-                        <span className="text-xs text-foreground w-16 shrink-0">{labels[key]}</span>
-                        <div className="flex-1 h-2 bg-muted/50 rounded-full overflow-hidden">
-                          <div
-                            className={cn("h-full transition-all", getColor(value))}
-                            style={{ width: `${value}%` }}
-                          />
-                        </div>
-                        <span className="text-xs text-muted-foreground w-10 text-right font-mono tabular-nums">
-                          {value}
-                        </span>
-                      </div>
-                    );
-                  })}
-                  {/* Overall Score */}
-                  <div className="pt-2 mt-2 border-t border-border/50">
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs font-medium text-foreground w-16 shrink-0">
-                        Overall
-                      </span>
-                      <div className="flex-1 h-2.5 bg-muted/50 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-primary transition-all"
-                          style={{
-                            width: `${Object.values(selectedDoc.scores).reduce((a, b) => a + b, 0) / 4}%`,
-                          }}
-                        />
-                      </div>
-                      <span className="text-sm font-semibold text-primary w-10 text-right tabular-nums">
-                        {Math.round(
-                          Object.values(selectedDoc.scores).reduce((a, b) => a + b, 0) / 4,
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Document Content */}
-              <div className="prose prose-sm dark:prose-invert max-w-none">
-                <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-muted-foreground">
-                  {selectedDoc.content}
-                </pre>
-              </div>
-            </div>
-
-            {/* Contextual Chat */}
-            <div className="w-[320px] flex flex-col bg-background shrink-0">
-              <div className="p-3 border-b text-xs font-medium text-muted-foreground flex items-center gap-2 bg-muted/5">
-                <Sparkles className="h-3.5 w-3.5 text-primary" />
-                Context Chat
-              </div>
-
-              <ScrollArea className="flex-1 p-4">
-                <div className="space-y-4">
-                  {getMessages(selectedDoc.id).map((msg) => (
-                    <div
-                      key={msg.id}
-                      className={`flex gap-3 ${msg.role === "user" ? "flex-row-reverse" : ""}`}
-                    >
-                      <Avatar className="h-6 w-6 border border-border shrink-0">
-                        {msg.role === "assistant" ? (
-                          <div className="h-full w-full bg-primary/10 flex items-center justify-center">
-                            <Bot className="h-3 w-3 text-primary" />
-                          </div>
-                        ) : (
-                          <AvatarFallback className="text-[10px]">ME</AvatarFallback>
-                        )}
-                      </Avatar>
-                      <div
-                        className={`
-                                            p-3 rounded-xl text-xs leading-relaxed
-                                            ${msg.role === "user" ? "bg-primary text-primary-foreground rounded-tr-sm" : "bg-muted border border-border/50 rounded-tl-sm"}
-                                        `}
-                      >
-                        {msg.content}
-                      </div>
-                    </div>
-                  ))}
-                  {isThinking && (
-                    <div className="flex gap-3">
-                      <Avatar className="h-6 w-6 border border-border shrink-0">
-                        <div className="h-full w-full bg-primary/10 flex items-center justify-center">
-                          <Bot className="h-3 w-3 text-primary" />
-                        </div>
-                      </Avatar>
-                      <div className="flex items-center gap-1 p-3 bg-muted border border-border/50 rounded-xl rounded-tl-sm h-9">
-                        <div className="h-1 w-1 bg-primary/40 rounded-full animate-bounce [animation-delay:-0.3s]" />
-                        <div className="h-1 w-1 bg-primary/40 rounded-full animate-bounce [animation-delay:-0.15s]" />
-                        <div className="h-1 w-1 bg-primary/40 rounded-full animate-bounce" />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </ScrollArea>
-
-              <div className="p-3 border-t bg-background">
-                <div className="relative">
-                  <Input
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleSend()}
-                    placeholder="Ask about this doc..."
-                    className="pr-10 h-9 text-xs"
-                  />
+              <div className="flex items-center gap-2">
+                {/* Tab Switcher */}
+                <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-1">
                   <Button
-                    size="icon"
-                    className="absolute right-1 top-1 h-7 w-7"
-                    variant="ghost"
-                    onClick={handleSend}
+                    variant={!showAIChat ? "secondary" : "ghost"}
+                    size="sm"
+                    className="h-7 text-xs px-3"
+                    onClick={() => setShowAIChat(false)}
                   >
-                    <Send className="h-3.5 w-3.5" />
+                    <FileText className="h-3 w-3 mr-1" />
+                    Document
+                  </Button>
+                  <Button
+                    variant={showAIChat ? "secondary" : "ghost"}
+                    size="sm"
+                    className="h-7 text-xs px-3"
+                    onClick={() => setShowAIChat(true)}
+                  >
+                    <Bot className="h-3 w-3 mr-1" />
+                    AI Chat
                   </Button>
                 </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleClosePanel();
+                    setShowAIChat(false);
+                  }}
+                  className="h-8 w-8"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
               </div>
             </div>
+
+            <div className="flex-1 flex overflow-hidden">
+              {!showAIChat ? (
+                /* Document Content */
+                <div className="flex-1 p-6 overflow-y-auto border-r border-border/40 bg-card/30">
+                {/* Type-specific metadata */}
+                {selectedNode.type === "task" && (
+                  <div className="mb-6 p-4 bg-background/60 border border-border/50 rounded-lg space-y-3">
+                    <h4 className="text-xs font-medium text-muted-foreground mb-3">
+                      Task Info
+                    </h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Status</span>
+                        <Badge
+                          variant={
+                            selectedNode.taskStatus === "done" ? "default" : "secondary"
+                          }
+                        >
+                          {selectedNode.taskStatus === "done" && "Done"}
+                          {selectedNode.taskStatus === "in-progress" && "In Progress"}
+                          {selectedNode.taskStatus === "todo" && "To Do"}
+                        </Badge>
+                      </div>
+                      {selectedNode.assignee && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Assignee</span>
+                          <span>{selectedNode.assignee}</span>
+                        </div>
+                      )}
+                      {selectedNode.dueDate && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Due Date</span>
+                          <span>{selectedNode.dueDate}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {selectedNode.type === "agent" && (
+                  <div className="mb-6 p-4 bg-purple-500/5 border border-purple-500/20 rounded-lg">
+                    <h4 className="text-xs font-medium text-purple-600 dark:text-purple-400 mb-2 flex items-center gap-2">
+                      <Bot className="h-3.5 w-3.5" />
+                      AI Generated Content
+                    </h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Generator</span>
+                        <span className="text-purple-600 dark:text-purple-400">
+                          {selectedNode.agentName}
+                        </span>
+                      </div>
+                      {selectedNode.generatedAt && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Generated At</span>
+                          <span>{selectedNode.generatedAt}</span>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-3 p-2 bg-background/50 rounded border border-purple-500/10">
+                      💡 Tip: AI-generated content requires human review
+                    </p>
+                  </div>
+                )}
+
+                {selectedNode.type === "idea" && (
+                  <div className="mb-6 p-4 bg-yellow-500/5 border border-yellow-500/20 rounded-lg">
+                    <h4 className="text-xs font-medium text-yellow-700 dark:text-yellow-500 mb-2">
+                      💡 Early-stage Idea
+                    </h4>
+                    <p className="text-xs text-muted-foreground">
+                      This is an unvalidated creative idea that can be refined with AI assistance or converted to a formal document for in-depth design.
+                    </p>
+                  </div>
+                )}
+
+                {/* Document Content */}
+                <div className="prose prose-sm dark:prose-invert max-w-none prose-headings:font-semibold prose-h1:text-xl prose-h2:text-lg prose-h3:text-base prose-p:text-sm prose-p:leading-relaxed prose-li:text-sm prose-pre:bg-muted prose-pre:text-foreground">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      a: ({ node, href, children, ...props }) => {
+                        // Handle node reference links [[node-id]]
+                        if (href?.startsWith('#')) {
+                          const nodeId = href.slice(1);
+                          return (
+                            <a
+                              href="#"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleNodeReferenceClick(nodeId);
+                              }}
+                              className="text-primary hover:underline cursor-pointer inline-flex items-center gap-1"
+                              {...props}
+                            >
+                              {children}
+                            </a>
+                          );
+                        }
+                        return <a href={href} {...props}>{children}</a>;
+                      },
+                    }}
+                  >
+                    {processContentWithReferences(selectedNode.content)}
+                  </ReactMarkdown>
+                </div>
+
+                {/* Tags Section */}
+                <div className="mt-6 pt-6 border-t border-border/50">
+                  <h4 className="text-xs font-medium text-muted-foreground mb-3 flex items-center gap-2">
+                    <Tag className="h-3 w-3" />
+                    Tags
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedNode.tags.map((tag) => {
+                      const [namespace, value] = tag.split("/");
+                      return (
+                        <Badge key={tag} variant="outline" className="text-xs">
+                          {namespace}/{value}
+                        </Badge>
+                      );
+                    })}
+                    <Button variant="outline" size="sm" className="h-6 text-xs">
+                      <Plus className="h-3 w-3 mr-1" />
+                      Add Tag
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Activity & Comments Timeline */}
+                <div className="mt-6 pt-6 border-t border-border/50">
+                  <h4 className="text-xs font-medium text-muted-foreground mb-3 flex items-center gap-2">
+                    <Activity className="h-3 w-3" />
+                    Activity & Comments
+                  </h4>
+                  <div className="space-y-3 mb-4">
+                    {(() => {
+                      // Merge activities and comments into unified timeline
+                      const activities = getFeedActivities(selectedNode.id);
+                      const comments = getComments(selectedNode.id);
+
+                      // Convert comments to activity format
+                      const commentActivities = comments.map((comment) => ({
+                        id: comment.id,
+                        type: "comment" as const,
+                        user: comment.user,
+                        timestamp: comment.timestamp,
+                        content: comment.content,
+                      }));
+
+                      // Combine and sort by timestamp (newest first)
+                      const timeline = [...activities, ...commentActivities].sort((a, b) => {
+                        // Simple timestamp comparison (assumes format like "2 hours ago", "1 day ago")
+                        return b.id.localeCompare(a.id); // Fallback to ID for stable sort
+                      });
+
+                      if (timeline.length === 0) {
+                        return (
+                          <div className="text-xs text-muted-foreground text-center py-4">
+                            No activity yet
+                          </div>
+                        );
+                      }
+
+                      return timeline.map((item) => {
+                        if (item.type === "comment") {
+                          // Render comment
+                          return (
+                            <div key={item.id} className="flex gap-2">
+                              <Avatar className="h-6 w-6 border border-border shrink-0 mt-0.5">
+                                <AvatarFallback className="text-[10px]">
+                                  {item.user.slice(0, 1)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-baseline gap-1.5 mb-1">
+                                  <span className="text-xs font-medium">{item.user}</span>
+                                  <span className="text-[11px] text-muted-foreground/60">
+                                    commented {item.timestamp}
+                                  </span>
+                                </div>
+                                <div className="text-xs text-foreground/90 leading-relaxed wrap-break-word bg-muted/30 p-2 rounded">
+                                  {item.content.split(/(@\w+)/g).map((part, i) =>
+                                    part.startsWith("@") ? (
+                                      <span key={i} className="text-primary font-medium">
+                                        {part}
+                                      </span>
+                                    ) : (
+                                      <span key={i}>{part}</span>
+                                    ),
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        } else {
+                          // Render activity
+                          return (
+                            <div key={item.id} className="flex gap-2 text-xs">
+                              <div className="shrink-0 mt-0.5">
+                                {item.type === "created" && (
+                                  <div className="h-5 w-5 rounded-full bg-blue-500/10 flex items-center justify-center">
+                                    <Plus className="h-3 w-3 text-blue-500" />
+                                  </div>
+                                )}
+                                {item.type === "updated" && (
+                                  <div className="h-5 w-5 rounded-full bg-green-500/10 flex items-center justify-center">
+                                    <FileText className="h-3 w-3 text-green-500" />
+                                  </div>
+                                )}
+                                {item.type === "status_changed" && (
+                                  <div className="h-5 w-5 rounded-full bg-purple-500/10 flex items-center justify-center">
+                                    <CheckSquare className="h-3 w-3 text-purple-500" />
+                                  </div>
+                                )}
+                                {item.type === "tag_added" && (
+                                  <div className="h-5 w-5 rounded-full bg-orange-500/10 flex items-center justify-center">
+                                    <Tag className="h-3 w-3 text-orange-500" />
+                                  </div>
+                                )}
+                                {item.type === "comment_added" && (
+                                  <div className="h-5 w-5 rounded-full bg-cyan-500/10 flex items-center justify-center">
+                                    <MessageSquare className="h-3 w-3 text-cyan-500" />
+                                  </div>
+                                )}
+                                {item.type === "agent_completed" && (
+                                  <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center">
+                                    <Bot className="h-3 w-3 text-primary" />
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-baseline gap-1.5">
+                                  <span className="font-medium text-foreground">{item.user}</span>
+                                  <span className="text-muted-foreground">{item.description}</span>
+                                </div>
+                                {item.details && (
+                                  <div className="text-[11px] text-muted-foreground mt-0.5">
+                                    {item.details}
+                                  </div>
+                                )}
+                                <div className="text-[11px] text-muted-foreground/60 mt-1 flex items-center gap-1">
+                                  <Clock className="h-2.5 w-2.5" />
+                                  {item.timestamp}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+                      });
+                    })()}
+                  </div>
+
+                  {/* Comment Input */}
+                  <div className="relative">
+                    <Input
+                      value={commentInput}
+                      onChange={(e) => setCommentInput(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleAddComment()}
+                      placeholder="Add a comment... (@ to mention)"
+                      className="pr-9 h-9 text-xs"
+                    />
+                    <Button
+                      size="icon"
+                      className="absolute right-1 top-1 h-7 w-7"
+                      variant="ghost"
+                      onClick={handleAddComment}
+                      disabled={!commentInput.trim()}
+                    >
+                      <Send className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+              ) : (
+                /* AI Chat Interface */
+                <SimpleChat
+                  messages={aiChatHistory}
+                  input={aiInput}
+                  onInputChange={setAiInput}
+                  onSend={handleSendAIMessage}
+                  emptyStateTitle="Chat with CrossMind AI"
+                  emptyStateDescription="CrossMind AI can help you analyze documents, provide suggestions, and generate content. The current document reference is attached in the input box."
+                />
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
