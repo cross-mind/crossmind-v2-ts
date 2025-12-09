@@ -87,7 +87,6 @@ export default function CanvasPage() {
   // Direct DOM manipulation refs for hybrid architecture
   const transformRef = useRef({ x: 0, y: 0, scale: 1 });
   const zonesContainerRef = useRef<HTMLDivElement>(null);
-  const linesContainerRef = useRef<SVGSVGElement>(null);
   const nodesContainerRef = useRef<HTMLDivElement>(null);
   const syncTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -188,9 +187,6 @@ export default function CanvasPage() {
     const transform = `translate(${transformRef.current.x}px, ${transformRef.current.y}px) scale(${transformRef.current.scale})`;
     if (zonesContainerRef.current) {
       zonesContainerRef.current.style.transform = transform;
-    }
-    if (linesContainerRef.current) {
-      linesContainerRef.current.style.transform = transform;
     }
     if (nodesContainerRef.current) {
       nodesContainerRef.current.style.transform = transform;
@@ -555,190 +551,7 @@ export default function CanvasPage() {
             }}
           />
 
-          {/* Connection lines */}
-          <svg
-            ref={linesContainerRef}
-            className="absolute pointer-events-none"
-            style={{
-              left: 0,
-              top: 0,
-              width: "4000px",
-              height: "4000px",
-              transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px) scale(${scale})`,
-              transformOrigin: "0 0",
-              overflow: "visible",
-              willChange: "transform",
-            }}
-          >
-            {/* Arrow and circle marker definitions */}
-            <defs>
-              <marker
-                id="arrowhead"
-                markerWidth="10"
-                markerHeight="10"
-                refX="9"
-                refY="3"
-                orient="auto"
-                markerUnits="strokeWidth"
-              >
-                <path d="M0,0 L0,6 L9,3 z" fill="#3b82f6" opacity="0.6" />
-              </marker>
-              <marker
-                id="circle-start"
-                markerWidth="8"
-                markerHeight="8"
-                refX="4"
-                refY="4"
-                markerUnits="strokeWidth"
-              >
-                <circle cx="4" cy="4" r="3" fill="#3b82f6" opacity="0.6" />
-              </marker>
-            </defs>
-
-            {(() => {
-              // Orthogonal routing algorithm
-              const nodeWidth = 320;
-              const nodeHeight = 160; // Estimated average node height
-              const padding = 20; // Padding around nodes
-              const routingGap = 40; // Gap for routing channels
-
-              // Helper: Check if two rectangles overlap
-              const rectOverlaps = (r1: { x: number; y: number; w: number; h: number }, r2: { x: number; y: number; w: number; h: number }) => {
-                return !(r1.x + r1.w < r2.x || r2.x + r2.w < r1.x || r1.y + r1.h < r2.y || r2.y + r2.h < r1.y);
-              };
-
-              // Helper: Check if a line segment intersects any node
-              const lineIntersectsNodes = (x1: number, y1: number, x2: number, y2: number, excludeIds: string[]) => {
-                for (const checkNode of visibleNodes) {
-                  if (excludeIds.includes(checkNode.id)) continue;
-                  const depth = getNodeDepth(checkNode.id);
-                  const nodeRect = {
-                    x: checkNode.position.x + depth * 20 - padding,
-                    y: checkNode.position.y - padding,
-                    w: nodeWidth + padding * 2,
-                    h: nodeHeight + padding * 2,
-                  };
-                  // Check if vertical line intersects
-                  if (x1 === x2 && x1 >= nodeRect.x && x1 <= nodeRect.x + nodeRect.w) {
-                    const minY = Math.min(y1, y2);
-                    const maxY = Math.max(y1, y2);
-                    if (!(maxY < nodeRect.y || minY > nodeRect.y + nodeRect.h)) {
-                      return true;
-                    }
-                  }
-                  // Check if horizontal line intersects
-                  if (y1 === y2 && y1 >= nodeRect.y && y1 <= nodeRect.y + nodeRect.h) {
-                    const minX = Math.min(x1, x2);
-                    const maxX = Math.max(x1, x2);
-                    if (!(maxX < nodeRect.x || minX > nodeRect.x + nodeRect.w)) {
-                      return true;
-                    }
-                  }
-                }
-                return false;
-              };
-
-              return visibleNodes.map((node) => {
-                if (!node.parentId) return null;
-                const parent = nodes.find((n) => n.id === node.parentId);
-                if (!parent) return null;
-
-                const depth = getNodeDepth(node.id);
-                const parentDepth = getNodeDepth(parent.id);
-
-                // Check if nodes are in the same vertical zone
-                const isSameZone = Math.abs(parent.position.x - node.position.x) < 200;
-
-                let pathD: string;
-
-                if (showStrategicZones && isSameZone) {
-                  // Vertical connection for same zone - use smart routing
-                  const startX = parent.position.x + parentDepth * 20 + nodeWidth / 2;
-                  const startY = parent.position.y + 160; // bottom of parent card
-                  const endX = node.position.x + depth * 20 + nodeWidth / 2;
-                  const endY = node.position.y; // top of child card
-
-                  // Calculate waypoints to avoid nodes
-                  const midY = (startY + endY) / 2;
-
-                  // Check if direct vertical path is blocked
-                  const directBlocked = lineIntersectsNodes(startX, startY, startX, endY, [node.id, parent.id]);
-
-                  if (!directBlocked && Math.abs(startX - endX) < 20) {
-                    // Direct vertical path if nodes are almost aligned
-                    pathD = `M ${startX} ${startY} L ${startX} ${endY}`;
-                  } else {
-                    // Z-shaped path with intelligent midpoint
-                    // Offset midpoint based on column to reduce crossing
-                    const columnOffset = (startX % 100) * 0.5; // Slight horizontal offset based on column position
-                    const offsetMidY = midY + columnOffset;
-                    pathD = `M ${startX} ${startY} L ${startX} ${offsetMidY} L ${endX} ${offsetMidY} L ${endX} ${endY}`;
-                  }
-                } else {
-                  // Horizontal connection for cross-zone - use smart routing
-                  const startX = parent.position.x + parentDepth * 20 + nodeWidth;
-                  const startY = parent.position.y + 80; // middle of node height
-                  const endX = node.position.x + depth * 20;
-                  const endY = node.position.y + 80;
-
-                  // Calculate routing channel
-                  const isGoingRight = endX > startX;
-                  const isGoingDown = endY > startY;
-
-                  // Use multiple waypoints to route around obstacles
-                  const exitX = startX + routingGap;
-                  const entryX = endX - routingGap;
-
-                  // Check if path needs vertical offset to avoid nodes
-                  const midX = (exitX + entryX) / 2;
-                  const needsOffset = lineIntersectsNodes(exitX, startY, entryX, startY, [node.id, parent.id]);
-
-                  if (needsOffset) {
-                    // Route with vertical offset to avoid obstacles
-                    const verticalOffset = isGoingDown ? Math.min(60, Math.abs(endY - startY) / 2) : -60;
-                    const offsetY = startY + verticalOffset;
-                    pathD = `M ${startX} ${startY} L ${exitX} ${startY} L ${exitX} ${offsetY} L ${entryX} ${offsetY} L ${entryX} ${endY} L ${endX} ${endY}`;
-                  } else if (Math.abs(endY - startY) < 20) {
-                    // Nearly horizontal - simple path
-                    pathD = `M ${startX} ${startY} L ${endX} ${endY}`;
-                  } else {
-                    // Standard L-shaped or Z-shaped path
-                    pathD = `M ${startX} ${startY} L ${midX} ${startY} L ${midX} ${endY} L ${endX} ${endY}`;
-                  }
-                }
-
-                // Dim lines for non-matching nodes
-                const isHighlighted = matchesFilter(node) && matchesFilter(parent);
-                const lineOpacity = isHighlighted ? 1 : 0.2;
-
-                return (
-                  <g key={`line-${node.id}`}>
-                    {/* Connection line with smooth appearance */}
-                    <path
-                      d={pathD}
-                      stroke="#3b82f6"
-                      strokeWidth="2"
-                      fill="none"
-                      opacity={0.4 * lineOpacity}
-                      strokeLinecap="round"
-                      markerStart="url(#circle-start)"
-                      markerEnd="url(#arrowhead)"
-                    />
-                    {/* Animated dashed line overlay */}
-                    <path
-                      d={pathD}
-                      stroke="#3b82f6"
-                      strokeWidth="1.5"
-                      fill="none"
-                      opacity={0.6 * lineOpacity}
-                      strokeDasharray="4 4"
-                      strokeLinecap="round"
-                    />
-                  </g>
-                );
-              });
-            })()}
-          </svg>
+          {/* Connection lines removed - using nested cards instead */}
 
           {/* Nodes */}
           <div
@@ -750,13 +563,61 @@ export default function CanvasPage() {
               willChange: "transform",
             }}
           >
-            {visibleNodes.map((node) => {
+            {visibleNodes.filter((node) => !node.parentId).map((node) => {
               const config = nodeTypeConfig[node.type];
               const Icon = config.icon;
-              const depth = getNodeDepth(node.id);
-              const hasChildren = node.children && node.children.length > 0;
               const isMatching = matchesFilter(node);
               const isHighlighted = stageFilter === "all" || isMatching;
+
+              // Recursive function to render child nodes as nested tree items
+              const renderChildren = (parentId: string, level: number = 1): React.ReactNode => {
+                const children = visibleNodes.filter((n) => n.parentId === parentId);
+                if (children.length === 0) return null;
+
+                return (
+                  <div className="">
+                    {children.map((child, index) => {
+                      const childConfig = nodeTypeConfig[child.type];
+                      const grandChildren = visibleNodes.filter((n) => n.parentId === child.id);
+                      const isLast = index === children.length - 1;
+
+                      return (
+                        <div key={child.id} className="relative pl-6">
+                          {/* Tree connector lines */}
+                          <div className="absolute left-0 top-0 bottom-0 w-6 pointer-events-none">
+                            {/* Vertical line connecting siblings */}
+                            {!isLast && (
+                              <div className="absolute left-[11px] top-0 bottom-0 w-px bg-border" />
+                            )}
+                            {/* L-shaped connector */}
+                            <div className="absolute left-[11px] top-0 w-px h-[13px] bg-border" />
+                            <div className="absolute left-[11px] top-[12px] w-[13px] h-px bg-border" />
+                          </div>
+
+                          <div
+                            className="flex items-center gap-2 py-1 px-2 -ml-4 pl-6 rounded-lg hover:bg-muted/50 cursor-pointer group/child transition-colors"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleNodeClick(child, e);
+                            }}
+                          >
+                            <div className={cn("h-1.5 w-1.5 rounded-full shrink-0", childConfig.color)} />
+                            <span className="text-xs font-medium flex-1 truncate">{child.title}</span>
+                            {grandChildren.length > 0 && (
+                              <span className="text-[10px] text-muted-foreground shrink-0">
+                                +{grandChildren.length}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Render grandchildren recursively */}
+                          {grandChildren.length > 0 && renderChildren(child.id, level + 1)}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              };
 
               return (
                 <div
@@ -774,8 +635,6 @@ export default function CanvasPage() {
                       : isHighlighted
                         ? "border-border hover:border-primary/50 hover:shadow-md"
                         : "border-border/30 opacity-40 hover:opacity-60",
-                    // Animate child nodes appearance
-                    depth > 0 && "animate-in fade-in-0 slide-in-from-left-2 duration-200",
                   )}
                   style={{
                     left: node.position.x,
@@ -806,12 +665,12 @@ export default function CanvasPage() {
                             AI Generated
                           </Badge>
                         )}
-                        {hasChildren && (
+                        {node.children && node.children.length > 0 && (
                           <Badge
                             variant="outline"
                             className="text-[10px] font-normal bg-primary/5 text-primary border-primary/20"
                           >
-                            {node.children!.length} children
+                            {node.children.length} children
                           </Badge>
                         )}
                       </div>
@@ -888,9 +747,12 @@ export default function CanvasPage() {
                     {node.content.replace(/[#*]/g, "").trim()}
                   </p>
 
+                  {/* Nested Children */}
+                  {renderChildren(node.id)}
+
                   {/* Tags */}
                   {node.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5">
+                    <div className="flex flex-wrap gap-1.5 mt-4">
                       {node.tags.slice(0, 3).map((tag) => {
                         const [namespace, value] = tag.split("/");
                         const tagColors: Record<string, string> = {
@@ -1158,6 +1020,48 @@ export default function CanvasPage() {
               {!showAIChat ? (
                 /* Document Content */
                 <div className="flex-1 p-6 overflow-y-auto border-r border-border/40 bg-card/30">
+                {/* Breadcrumb for child nodes */}
+                {selectedNode.parentId && (() => {
+                  // Build breadcrumb path
+                  const buildBreadcrumb = (nodeId: string): CanvasNode[] => {
+                    const current = nodes.find(n => n.id === nodeId);
+                    if (!current) return [];
+                    if (!current.parentId) return [current];
+                    return [...buildBreadcrumb(current.parentId), current];
+                  };
+
+                  const breadcrumbPath = buildBreadcrumb(selectedNode.id);
+                  // Remove the last item (current node) from breadcrumb
+                  const parentPath = breadcrumbPath.slice(0, -1);
+
+                  return parentPath.length > 0 ? (
+                    <div className="mb-4 pb-4 border-b border-border/50">
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground flex-wrap">
+                        {parentPath.map((ancestor, index) => (
+                          <React.Fragment key={ancestor.id}>
+                            <button
+                              className="hover:text-foreground transition-colors truncate max-w-[150px]"
+                              onClick={() => {
+                                const ancestorNode = nodes.find(n => n.id === ancestor.id);
+                                if (ancestorNode) handleNodeClick(ancestorNode, {} as React.MouseEvent);
+                              }}
+                            >
+                              {ancestor.title}
+                            </button>
+                            {index < parentPath.length - 1 && (
+                              <span className="text-muted-foreground/50">/</span>
+                            )}
+                          </React.Fragment>
+                        ))}
+                        <span className="text-muted-foreground/50">/</span>
+                        <span className="text-foreground font-medium truncate max-w-[150px]">
+                          {selectedNode.title}
+                        </span>
+                      </div>
+                    </div>
+                  ) : null;
+                })()}
+
                 {/* Type-specific metadata */}
                 {selectedNode.type === "task" && (
                   <div className="mb-6 p-4 bg-background/60 border border-border/50 rounded-lg space-y-3">
