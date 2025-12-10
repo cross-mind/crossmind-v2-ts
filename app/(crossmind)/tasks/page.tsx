@@ -8,11 +8,14 @@ import {
   Clock,
   Edit2,
   FileText,
-  Layout,
+  Filter,
+  LayoutGrid,
+  List,
   MessageSquare,
   Plus,
   Send,
   X,
+  AlertCircle,
 } from "lucide-react";
 import React, { useState } from "react";
 import { SidebarToggle } from "@/components/sidebar-toggle";
@@ -33,7 +36,7 @@ interface Task {
   assignee?: string;
   priority: "High" | "Medium" | "Low";
   dueDate?: string;
-  status: "Todo" | "In Progress" | "Done";
+  status: "Todo" | "In Progress" | "Review" | "Done";
   relatedDocId?: string;
 }
 
@@ -87,6 +90,25 @@ const COLUMN_TASKS: Record<string, Task[]> = {
       description: "Write comprehensive product requirements document covering all MVP features.",
       relatedDocId: "doc-3",
     },
+    {
+      id: "5",
+      title: "Implement Authentication Flow",
+      tag: "Dev",
+      priority: "High",
+      status: "In Progress",
+      description: "Build login, signup, and password reset flows.",
+    },
+  ],
+  Review: [
+    {
+      id: "6",
+      title: "Landing Page Design",
+      tag: "Design",
+      priority: "Medium",
+      status: "Review",
+      description: "Design hero section and key features showcase.",
+      relatedDocId: "doc-5",
+    },
   ],
   Done: [
     {
@@ -98,6 +120,14 @@ const COLUMN_TASKS: Record<string, Task[]> = {
       status: "Done",
       description: "Conduct initial brainstorming session and document key ideas.",
       relatedDocId: "doc-1",
+    },
+    {
+      id: "7",
+      title: "Setup Development Environment",
+      tag: "Dev",
+      priority: "Low",
+      status: "Done",
+      description: "Configure local development environment and tooling.",
     },
   ],
 };
@@ -207,8 +237,9 @@ const PRIORITY_COLORS = {
 
 const STATUS_ICONS = {
   Todo: <Circle className="h-3.5 w-3.5 text-muted-foreground" />,
-  "In Progress": <CircleDashed className="h-3.5 w-3.5 text-yellow-600" />,
-  Done: <CheckCircle2 className="h-3.5 w-3.5 text-primary" />,
+  "In Progress": <CircleDashed className="h-3.5 w-3.5 text-blue-600" />,
+  Review: <AlertCircle className="h-3.5 w-3.5 text-orange-600" />,
+  Done: <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />,
 };
 
 export default function TaskBoardPage() {
@@ -216,6 +247,10 @@ export default function TaskBoardPage() {
   const [commentInput, setCommentInput] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [editedTask, setEditedTask] = useState<Task | null>(null);
+  const [viewMode, setViewMode] = useState<"board" | "list">("board");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [priorityFilter, setPriorityFilter] = useState<string>("all");
+  const [tagFilter, setTagFilter] = useState<string>("all");
 
   const totalTasks = Object.values(COLUMN_TASKS).flat().length;
 
@@ -258,15 +293,44 @@ export default function TaskBoardPage() {
         <div className="flex items-center gap-2">
           <SidebarToggle />
           <Separator orientation="vertical" className="h-4" />
-          <Layout className="h-4 w-4 text-muted-foreground" />
+          <LayoutGrid className="h-4 w-4 text-muted-foreground" />
           <h1 className="text-sm font-medium">MVP Launch Plan</h1>
           <span className="text-xs text-muted-foreground/60">·</span>
           <span className="text-xs text-muted-foreground">{totalTasks} tasks</span>
         </div>
-        <Button size="sm" className="h-8 gap-2">
-          <Plus className="h-3.5 w-3.5" />
-          New Task
-        </Button>
+
+        <div className="flex items-center gap-2">
+          {/* View Mode Toggle */}
+          <div className="flex items-center border rounded-lg p-0.5">
+            <Button
+              variant={viewMode === "board" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 px-2"
+              onClick={() => setViewMode("board")}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant={viewMode === "list" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 px-2"
+              onClick={() => setViewMode("list")}
+            >
+              <List className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+
+          {/* Filter Button */}
+          <Button variant="outline" size="sm" className="h-8 gap-2">
+            <Filter className="h-3.5 w-3.5" />
+            Filter
+          </Button>
+
+          <Button size="sm" className="h-8 gap-2">
+            <Plus className="h-3.5 w-3.5" />
+            New Task
+          </Button>
+        </div>
       </div>
 
       {/* Kanban Columns */}
@@ -300,16 +364,9 @@ export default function TaskBoardPage() {
                       <p className="text-sm text-foreground flex-1 leading-snug">{task.title}</p>
                     </div>
 
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <div className="flex items-center gap-2">
-                        <div className={`h-1.5 w-1.5 rounded-full ${TAG_COLORS[task.tag]}`} />
-                        <span>{task.tag}</span>
-                      </div>
-                      {task.assignee && (
-                        <Avatar className="h-4 w-4">
-                          <AvatarFallback className="text-[8px]">{task.assignee}</AvatarFallback>
-                        </Avatar>
-                      )}
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <div className={`h-1.5 w-1.5 rounded-full ${TAG_COLORS[task.tag]}`} />
+                      <span>{task.tag}</span>
                     </div>
                   </div>
                 ))}
@@ -396,41 +453,21 @@ export default function TaskBoardPage() {
                         placeholder="Add task description..."
                       />
                     ) : (
-                      <p className="text-sm text-foreground text-muted-foreground">
+                      <p className="text-sm text-muted-foreground">
                         {selectedTask.description || "No description"}
                       </p>
                     )}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-xs text-muted-foreground mb-1">Priority</Label>
-                      <div className="flex items-center gap-2">
-                        <div
-                          className={`h-1.5 w-1.5 rounded-full ${PRIORITY_COLORS[selectedTask.priority]}`}
-                        />
-                        <span className="text-sm text-foreground capitalize">
-                          {selectedTask.priority}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div>
-                      <Label className="text-xs text-muted-foreground mb-1">Assignee</Label>
-                      <div className="flex items-center gap-2">
-                        {selectedTask.assignee ? (
-                          <>
-                            <Avatar className="h-5 w-5">
-                              <AvatarFallback className="text-[10px]">
-                                {selectedTask.assignee}
-                              </AvatarFallback>
-                            </Avatar>
-                            <span className="text-sm text-foreground">{selectedTask.assignee}</span>
-                          </>
-                        ) : (
-                          <span className="text-sm text-muted-foreground">Unassigned</span>
-                        )}
-                      </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-1">Priority</Label>
+                    <div className="flex items-center gap-2">
+                      <div
+                        className={`h-1.5 w-1.5 rounded-full ${PRIORITY_COLORS[selectedTask.priority]}`}
+                      />
+                      <span className="text-sm text-foreground capitalize">
+                        {selectedTask.priority}
+                      </span>
                     </div>
                   </div>
 
