@@ -40,16 +40,23 @@ import {
   NODE_WIDTH,
   VERTICAL_GAP,
   COLUMN_GAP,
-  ZONE_CONFIGS,
   MOCK_FEED,
   MOCK_COMMENTS,
   MOCK_SUGGESTIONS,
+  FRAMEWORKS,
+  ZONE_COLORS,
   type NodeContent,
   type CanvasNode,
   type FeedActivity,
   type Comment,
   type AISuggestion,
+  type ThinkingFramework,
 } from "./canvas-data";
+import { FrameworkSwitcher } from "./components/FrameworkSwitcher";
+import { HealthOverview } from "./components/HealthOverview";
+import { NodeHealthBadge } from "./components/NodeHealthBadge";
+import { HealthPopover } from "./components/HealthPopover";
+import { SubscriptionDebugger } from "@/components/SubscriptionDebugger";
 
 type StageFilter = "all" | "ideation" | "research" | "design" | "dev" | "launch";
 
@@ -68,6 +75,70 @@ export default function CanvasPage() {
   const [suggestions] = useState<AISuggestion[]>(MOCK_SUGGESTIONS);
   const [stageFilter, setStageFilter] = useState<StageFilter>("all");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+
+  // Framework switcher state
+  const [currentFramework, setCurrentFramework] = useState<ThinkingFramework>(FRAMEWORKS[0]);
+
+  // Generate dynamic zone configs based on current framework
+  const getDynamicZoneConfigs = useCallback(() => {
+    const configs: Record<string, { startX: number; startY: number; columnCount: number; nodeIds: string[] }> = {};
+
+    const zoneCount = currentFramework.zones.length;
+    const ZONE_WIDTH = 800;
+    const ZONE_GAP = 20;
+    const ZONE_ROW_HEIGHT = 1000; // Increased vertical space per row to prevent overlap
+
+    // Smart layout: if more than 5 zones, use grid layout
+    let zonesPerRow = zoneCount;
+    let rowCount = 1;
+
+    if (zoneCount > 5) {
+      zonesPerRow = zoneCount <= 8 ? 4 : 3; // 6-8 zones: 4 per row, 9+ zones: 3 per row
+      rowCount = Math.ceil(zoneCount / zonesPerRow);
+    }
+
+    // Initialize zone configs with grid positions
+    currentFramework.zones.forEach((zone, index) => {
+      const row = Math.floor(index / zonesPerRow);
+      const col = index % zonesPerRow;
+
+      configs[zone.id] = {
+        startX: ZONE_GAP + col * (ZONE_WIDTH + ZONE_GAP),
+        startY: ZONE_GAP + row * ZONE_ROW_HEIGHT, // Use larger vertical spacing
+        columnCount: 2,
+        nodeIds: []
+      };
+    });
+
+    // Assign each node to the best matching zone based on affinity weights
+    nodeContents.forEach(node => {
+      const affinities = node.zoneAffinities?.[currentFramework.id];
+
+      if (affinities) {
+        // Find zone with highest affinity
+        let bestZone = currentFramework.zones[0].id;
+        let maxWeight = 0;
+
+        for (const [zoneId, weight] of Object.entries(affinities)) {
+          if (weight > maxWeight && configs[zoneId]) {
+            maxWeight = weight;
+            bestZone = zoneId;
+          }
+        }
+
+        configs[bestZone].nodeIds.push(node.id);
+      } else {
+        // Fallback: distribute nodes without affinity data evenly across zones
+        const zoneCount = currentFramework.zones.length;
+        const nodeIndex = nodeContents.indexOf(node);
+        const assignedZoneIndex = nodeIndex % zoneCount;
+        const fallbackZone = currentFramework.zones[assignedZoneIndex].id;
+        configs[fallbackZone].nodeIds.push(node.id);
+      }
+    });
+
+    return configs;
+  }, [currentFramework, nodeContents]);
 
   // AI Chat state
   const [showAIChat, setShowAIChat] = useState(false);
@@ -130,6 +201,15 @@ export default function CanvasPage() {
     setAiChatHistory([...aiChatHistory, { role: "user", content: aiInput }]);
     setAiInput("");
     // In real app, would send to AI backend
+  };
+
+  // Handle framework change
+  const handleFrameworkChange = (framework: ThinkingFramework) => {
+    setCurrentFramework(framework);
+    // Reset layout to trigger recalculation with new framework
+    setLayoutCalculated(false);
+    setNodes([]);
+    setZoneBounds({});
   };
 
   // Handle node reference click [[node-id]]
@@ -216,9 +296,12 @@ export default function CanvasPage() {
       // Track max height across all zones
       let globalMaxHeight = 0;
 
+      // Get dynamic zone configs based on current framework
+      const dynamicZoneConfigs = getDynamicZoneConfigs();
+
       // Process each zone
-      for (const [zoneName, config] of Object.entries(ZONE_CONFIGS)) {
-        const currentYInColumn: number[] = Array(config.columnCount).fill(90); // Top padding for zone header (label + spacing)
+      for (const [zoneName, config] of Object.entries(dynamicZoneConfigs)) {
+        const currentYInColumn: number[] = Array(config.columnCount).fill(config.startY + 90); // Start from zone's Y position + top padding for zone header
 
         // Get only root nodes (without parentId) from this zone
         const rootNodeIds = config.nodeIds.filter(nodeId => {
@@ -248,8 +331,8 @@ export default function CanvasPage() {
           currentYInColumn[currentColumn] += actualHeight + 30; // Reduced from VERTICAL_GAP (40) to 30
         });
 
-        // Calculate zone bounds based on actual content
-        const maxHeight = Math.max(...currentYInColumn);
+        // Calculate zone bounds based on actual content (relative to zone's start position)
+        const maxHeight = Math.max(...currentYInColumn) - config.startY;
         const zoneWidth = config.columnCount * NODE_WIDTH + (config.columnCount - 1) * COLUMN_GAP + 40; // +40 for padding
 
         calculatedZoneBounds[zoneName] = {
@@ -280,7 +363,7 @@ export default function CanvasPage() {
       setZoneBounds(calculatedZoneBounds);
       setLayoutCalculated(true);
     });
-  }, [nodes, nodeContents, layoutCalculated]);
+  }, [nodes, nodeContents, layoutCalculated, getDynamicZoneConfigs]);
 
   useEffect(() => {
     const handleGlobalMouseUp = () => {
@@ -360,11 +443,11 @@ export default function CanvasPage() {
       label: "Idea",
       emoji: "💡",
     },
-    agent: {
-      icon: Bot,
-      color: "bg-purple-500",
-      label: "Agent",
-      emoji: "🤖",
+    inspiration: {
+      icon: Sparkles,
+      color: "bg-pink-500",
+      label: "Inspiration",
+      emoji: "💡",
     },
   };
 
@@ -396,61 +479,16 @@ export default function CanvasPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* AI Suggestions Dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm">
-                <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-                AI Suggestions
-                {suggestions.length > 0 && (
-                  <Badge variant="secondary" className="ml-1.5 h-4 px-1 text-[10px]">
-                    {suggestions.length}
-                  </Badge>
-                )}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-80">
-              <div className="p-3 border-b">
-                <h3 className="text-sm font-medium flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  AI Smart Suggestions
-                </h3>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Scanned {nodes.length} nodes
-                </p>
-              </div>
-              <ScrollArea className="max-h-[400px]">
-                <div className="p-2 space-y-2">
-                  {suggestions.map((suggestion) => (
-                    <div
-                      key={suggestion.id}
-                      className="p-3 bg-muted/50 rounded-lg hover:bg-muted transition-colors cursor-pointer"
-                    >
-                      <div className="flex items-start justify-between gap-2 mb-1">
-                        <p className="text-xs font-medium">{suggestion.title}</p>
-                        <Badge variant="secondary" className="text-[10px] shrink-0">
-                          {suggestion.type === "add-node" && "Add"}
-                          {suggestion.type === "add-tag" && "Tag"}
-                          {suggestion.type === "refine-content" && "Refine"}
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground leading-relaxed mb-2">
-                        {suggestion.description}
-                      </p>
-                      <div className="flex gap-1.5">
-                        <Button size="sm" variant="outline" className="h-6 text-xs flex-1">
-                          Accept
-                        </Button>
-                        <Button size="sm" variant="ghost" className="h-6 text-xs px-2">
-                          Dismiss
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </ScrollArea>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {/* Framework Switcher */}
+          <FrameworkSwitcher
+            currentFramework={currentFramework}
+            onFrameworkChange={handleFrameworkChange}
+          />
+
+          <Separator orientation="vertical" className="h-6" />
+
+          {/* Health Overview (now includes suggestions) */}
+          <HealthOverview nodes={nodes} suggestions={suggestions} />
         </div>
       </header>
 
@@ -465,7 +503,7 @@ export default function CanvasPage() {
           onClick={() => setSelectedNode(null)}
           style={{ cursor: isDragging ? "grabbing" : "grab" }}
         >
-          {/* Strategic Zones Background */}
+          {/* Strategic Zones Background - Dynamic based on current framework */}
           {showStrategicZones && (
             <div
               ref={zonesContainerRef}
@@ -480,73 +518,44 @@ export default function CanvasPage() {
                 willChange: "transform",
               }}
             >
-              {/* Ideation Zone */}
-              {layoutCalculated && (
-                <div
-                  className="absolute border-2 border-dashed border-yellow-500/20 bg-yellow-500/5 rounded-2xl transition-all duration-300"
-                  style={{
-                    left: ZONE_CONFIGS.ideation.startX - 20,
-                    top: 20,
-                    width: zoneBounds.ideation?.width || 800,
-                    height: zoneBounds.ideation?.height || 800
-                  }}
-                >
-                  <div className="absolute top-3 left-4 text-sm font-medium text-yellow-600/60 px-3 py-1.5 bg-yellow-500/10 rounded-lg inline-block backdrop-blur-sm">
-                    💡 Ideation
-                  </div>
-                </div>
-              )}
+              {/* Render zones based on current framework */}
+              {layoutCalculated && (() => {
+                // Get zone configurations for current framework
+                const zoneConfigs = getDynamicZoneConfigs();
 
-              {/* Design Zone */}
-              {layoutCalculated && (
-                <div
-                  className="absolute border-2 border-dashed border-blue-500/20 bg-blue-500/5 rounded-2xl transition-all duration-300"
-                  style={{
-                    left: ZONE_CONFIGS.design.startX - 20,
-                    top: 20,
-                    width: zoneBounds.design?.width || 800,
-                    height: zoneBounds.design?.height || 800
-                  }}
-                >
-                  <div className="absolute top-3 left-4 text-sm font-medium text-blue-600/60 px-3 py-1.5 bg-blue-500/10 rounded-lg inline-block backdrop-blur-sm">
-                    📋 Design
-                  </div>
-                </div>
-              )}
+                return currentFramework.zones.map((zone) => {
+                  // Get zone configuration with grid position
+                  const config = zoneConfigs[zone.id];
+                  const zoneBound = zoneBounds[zone.id];
 
-              {/* Development Zone */}
-              {layoutCalculated && (
-                <div
-                  className="absolute border-2 border-dashed border-green-500/20 bg-green-500/5 rounded-2xl transition-all duration-300"
-                  style={{
-                    left: ZONE_CONFIGS.dev.startX - 20,
-                    top: 20,
-                    width: zoneBounds.dev?.width || 800,
-                    height: zoneBounds.dev?.height || 800
-                  }}
-                >
-                  <div className="absolute top-3 left-4 text-sm font-medium text-green-600/60 px-3 py-1.5 bg-green-500/10 rounded-lg inline-block backdrop-blur-sm">
-                    ⚙️ Development
-                  </div>
-                </div>
-              )}
+                  // Get colors from the palette using colorKey
+                  const colors = ZONE_COLORS[zone.colorKey];
 
-              {/* Launch Zone */}
-              {layoutCalculated && (
-                <div
-                  className="absolute border-2 border-dashed border-purple-500/20 bg-purple-500/5 rounded-2xl transition-all duration-300"
-                  style={{
-                    left: ZONE_CONFIGS.launch.startX - 20,
-                    top: 20,
-                    width: zoneBounds.launch?.width || 800,
-                    height: zoneBounds.launch?.height || 800
-                  }}
-                >
-                  <div className="absolute top-3 left-4 text-sm font-medium text-purple-600/60 px-3 py-1.5 bg-purple-500/10 rounded-lg inline-block backdrop-blur-sm">
-                    🚀 Launch
-                  </div>
-                </div>
-              )}
+                  return (
+                    <div
+                      key={zone.id}
+                      className="absolute border-2 border-dashed rounded-2xl transition-all duration-500"
+                      style={{
+                        left: config.startX - 20,
+                        top: config.startY - 20,
+                        width: zoneBound?.width || 800,
+                        height: zoneBound?.height || 800,
+                        borderColor: `${colors.base}4D`, // 30% opacity for border
+                        backgroundColor: `${colors.base}1A`, // 10% opacity for background
+                      }}
+                    >
+                      <div
+                        className="absolute top-3 left-4 text-sm font-bold px-3 py-1.5 rounded-lg inline-block text-white shadow-md"
+                        style={{
+                          backgroundColor: colors.label,
+                        }}
+                      >
+                        {zone.name}
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
             </div>
           )}
 
@@ -629,31 +638,34 @@ export default function CanvasPage() {
               };
 
               return (
-                <div
-                  key={node.id}
-                  ref={(el) => {
-                    if (el) {
-                      nodeRefs.current.set(node.id, el);
-                    }
-                  }}
-                  className={cn(
-                    "absolute w-80 p-4 bg-background border-2 rounded-xl shadow-sm cursor-pointer group select-none",
-                    "transition-all duration-300 ease-out",
-                    selectedNode?.id === node.id
-                      ? "border-primary shadow-lg scale-105 z-10"
-                      : isHighlighted
-                        ? "border-border hover:border-primary/50 hover:shadow-md"
-                        : "border-border/30 opacity-40 hover:opacity-60",
-                  )}
-                  style={{
-                    left: node.position.x,
-                    top: node.position.y,
-                    userSelect: "none",
-                  }}
-                  onClick={(e) => handleNodeClick(node, e)}
-                >
-                  {/* Header */}
-                  <div className="flex items-start gap-2 mb-3">
+                <HealthPopover key={node.id} node={node}>
+                  <div
+                    ref={(el) => {
+                      if (el) {
+                        nodeRefs.current.set(node.id, el);
+                      }
+                    }}
+                    className={cn(
+                      "absolute w-80 p-4 bg-background border-2 rounded-xl shadow-sm cursor-pointer group select-none",
+                      "transition-all duration-300 ease-out",
+                      selectedNode?.id === node.id
+                        ? "border-primary shadow-lg scale-105 z-10"
+                        : isHighlighted
+                          ? "border-border hover:border-primary/50 hover:shadow-md"
+                          : "border-border/30 opacity-40 hover:opacity-60",
+                    )}
+                    style={{
+                      left: node.position.x,
+                      top: node.position.y,
+                      userSelect: "none",
+                    }}
+                    onClick={(e) => handleNodeClick(node, e)}
+                  >
+                    {/* Health Badge */}
+                    <NodeHealthBadge node={node} />
+
+                    {/* Header */}
+                    <div className="flex items-start gap-2 mb-3">
                     <div
                       className={cn(
                         "p-2 rounded-lg shrink-0",
@@ -669,11 +681,6 @@ export default function CanvasPage() {
                         <Badge variant="secondary" className="text-[10px] font-normal">
                           {config.emoji} {config.label}
                         </Badge>
-                        {node.type === "agent" && (
-                          <Badge variant="outline" className="text-[10px] font-normal">
-                            AI Generated
-                          </Badge>
-                        )}
                         {node.children && node.children.length > 0 && (
                           <Badge
                             variant="outline"
@@ -728,26 +735,31 @@ export default function CanvasPage() {
                     </div>
                   )}
 
-                  {node.type === "agent" && (
-                    <div className="mb-3 p-2 bg-purple-500/5 border border-purple-500/20 rounded-lg">
-                      <div className="flex items-center gap-1.5 text-xs text-purple-600 dark:text-purple-400">
-                        <Bot className="h-3 w-3" />
-                        <span className="font-medium">由 {node.agentName} 生成</span>
-                      </div>
-                      {node.generatedAt && (
-                        <div className="flex items-center gap-1 text-[10px] text-muted-foreground mt-1">
-                          <Clock className="h-2.5 w-2.5" />
-                          {node.generatedAt}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
                   {node.type === "idea" && (
                     <div className="mb-3 p-2 bg-yellow-500/5 border border-yellow-500/20 rounded-lg">
                       <p className="text-xs text-yellow-700 dark:text-yellow-500">
                         💡 早期想法，待验证
                       </p>
+                    </div>
+                  )}
+
+                  {node.type === "inspiration" && (
+                    <div className="mb-3 p-2 bg-pink-500/5 border border-pink-500/20 rounded-lg">
+                      <div className="flex items-center gap-1.5 text-xs text-pink-600 dark:text-pink-400 mb-1">
+                        <Sparkles className="h-3 w-3" />
+                        <span className="font-medium">Inspiration</span>
+                      </div>
+                      {node.source && (
+                        <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                          <span>📚 {node.source}</span>
+                        </div>
+                      )}
+                      {node.capturedAt && (
+                        <div className="flex items-center gap-1 text-[10px] text-muted-foreground mt-0.5">
+                          <Clock className="h-2.5 w-2.5" />
+                          {node.capturedAt}
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -813,6 +825,7 @@ export default function CanvasPage() {
                     </div>
                   </div>
                 </div>
+                </HealthPopover>
               );
             })}
           </div>
@@ -1106,32 +1119,6 @@ export default function CanvasPage() {
                   </div>
                 )}
 
-                {selectedNode.type === "agent" && (
-                  <div className="mb-6 p-4 bg-purple-500/5 border border-purple-500/20 rounded-lg">
-                    <h4 className="text-xs font-medium text-purple-600 dark:text-purple-400 mb-2 flex items-center gap-2">
-                      <Bot className="h-3.5 w-3.5" />
-                      AI Generated Content
-                    </h4>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Generator</span>
-                        <span className="text-purple-600 dark:text-purple-400">
-                          {selectedNode.agentName}
-                        </span>
-                      </div>
-                      {selectedNode.generatedAt && (
-                        <div className="flex items-center justify-between">
-                          <span className="text-muted-foreground">Generated At</span>
-                          <span>{selectedNode.generatedAt}</span>
-                        </div>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-3 p-2 bg-background/50 rounded border border-purple-500/10">
-                      💡 Tip: AI-generated content requires human review
-                    </p>
-                  </div>
-                )}
-
                 {selectedNode.type === "idea" && (
                   <div className="mb-6 p-4 bg-yellow-500/5 border border-yellow-500/20 rounded-lg">
                     <h4 className="text-xs font-medium text-yellow-700 dark:text-yellow-500 mb-2">
@@ -1139,6 +1126,34 @@ export default function CanvasPage() {
                     </h4>
                     <p className="text-xs text-muted-foreground">
                       This is an unvalidated creative idea that can be refined with AI assistance or converted to a formal document for in-depth design.
+                    </p>
+                  </div>
+                )}
+
+                {selectedNode.type === "inspiration" && (
+                  <div className="mb-6 p-4 bg-pink-500/5 border border-pink-500/20 rounded-lg">
+                    <h4 className="text-xs font-medium text-pink-600 dark:text-pink-400 mb-2 flex items-center gap-2">
+                      <Sparkles className="h-3.5 w-3.5" />
+                      Inspiration Captured
+                    </h4>
+                    <div className="space-y-2 text-sm">
+                      {selectedNode.source && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Source</span>
+                          <span className="text-pink-600 dark:text-pink-400">
+                            {selectedNode.source}
+                          </span>
+                        </div>
+                      )}
+                      {selectedNode.capturedAt && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Captured At</span>
+                          <span>{selectedNode.capturedAt}</span>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-3 p-2 bg-background/50 rounded border border-pink-500/10">
+                      💡 Tip: This inspiration can be transformed into a document or used as a reference for ideas
                     </p>
                   </div>
                 )}
@@ -1292,11 +1307,6 @@ export default function CanvasPage() {
                                     <MessageSquare className="h-3 w-3 text-cyan-500" />
                                   </div>
                                 )}
-                                {item.type === "agent_completed" && (
-                                  <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center">
-                                    <Bot className="h-3 w-3 text-primary" />
-                                  </div>
-                                )}
                               </div>
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-baseline gap-1.5">
@@ -1356,6 +1366,9 @@ export default function CanvasPage() {
           </div>
         )}
       </div>
+
+      {/* Subscription Debugger */}
+      <SubscriptionDebugger />
     </div>
   );
 }

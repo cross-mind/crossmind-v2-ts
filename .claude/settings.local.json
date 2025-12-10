@@ -5,7 +5,11 @@
       "Bash(pnpm add:*)",
       "Bash(pnpm exec tsc:*)",
       "Bash(node -e \"\nconst data = require(''./app/(crossmind)/canvas/canvas-data.ts'');\nconsole.log(''Generated layouts:'', data.NODE_LAYOUTS.slice(0, 10));\n\")",
-      "Bash(node --eval:*)"
+      "Bash(node --eval:*)",
+      "Bash(npx shadcn@latest add popover)",
+      "Bash(npx shadcn@latest add:*)",
+      "Bash(ls:*)",
+      "Bash(npm run build:*)"
     ],
     "deny": [],
     "ask": []

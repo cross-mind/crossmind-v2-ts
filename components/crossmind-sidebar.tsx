@@ -3,7 +3,6 @@
 import {
   Brain,
   ChevronsUpDown,
-  Code2,
   Command,
   FolderOpen,
   Layout,
@@ -86,37 +85,12 @@ export function CrossMindSidebar({ user }: { user: User | undefined }) {
 
   const navItems = [
     {
-      title: "Incubator",
+      title: "Workspace",
       items: [
         {
           title: "Strategy Canvas",
           href: "/canvas",
           icon: Sparkles,
-        },
-        {
-          title: "Project Memory",
-          href: "/memory",
-          icon: Brain,
-        },
-      ],
-    },
-    {
-      title: "Execution",
-      items: [
-        {
-          title: "Task Board",
-          href: "/tasks",
-          icon: Layout,
-        },
-        {
-          title: "Development",
-          href: "/dev",
-          icon: Code2,
-        },
-        {
-          title: "Agent Services",
-          href: "/agents",
-          icon: MessageSquare,
         },
       ],
     },
