@@ -12,9 +12,9 @@ import {
   Sparkles,
 } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { User } from "next-auth";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { useSWRConfig } from "swr";
 import { unstable_serialize } from "swr/infinite";
@@ -26,6 +26,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -53,16 +54,117 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "./ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { Textarea } from "./ui/textarea";
 import { Separator } from "./ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
+import { Check } from "lucide-react";
+import { ThemeToggle } from "./theme-toggle";
+
+interface Project {
+  id: string;
+  name: string;
+  description: string | null;
+  role: "owner" | "member" | "guest";
+}
 
 export function CrossMindSidebar({ user }: { user: User | undefined }) {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { setOpenMobile } = useSidebar();
   const { mutate } = useSWRConfig();
   const [showDeleteAllDialog, setShowDeleteAllDialog] = useState(false);
-  const [currentProject, setCurrentProject] = useState("CrossMind MVP");
+
+  // Project management state
+  const currentProjectId = searchParams?.get("projectId");
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [currentProject, setCurrentProject] = useState<Project | null>(null);
+  const [isProjectsLoading, setIsProjectsLoading] = useState(true);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [newProjectDescription, setNewProjectDescription] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
+
+  // Fetch projects
+  useEffect(() => {
+    async function fetchProjects() {
+      try {
+        const response = await fetch("/api/projects");
+        if (response.ok) {
+          const data = await response.json();
+          setProjects(data.projects || []);
+
+          // Set current project
+          if (currentProjectId) {
+            const current = data.projects.find((p: Project) => p.id === currentProjectId);
+            setCurrentProject(current || null);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to fetch projects:", error);
+      } finally {
+        setIsProjectsLoading(false);
+      }
+    }
+
+    fetchProjects();
+  }, [currentProjectId]);
+
+  // Switch project
+  const handleSwitchProject = (projectId: string) => {
+    setOpenMobile(false);
+    router.push(`/canvas?projectId=${projectId}`);
+  };
+
+  // Create new project
+  const handleCreateProject = async () => {
+    if (!newProjectName.trim()) return;
+
+    setIsCreating(true);
+    try {
+      const response = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newProjectName.trim(),
+          description: newProjectDescription.trim() || undefined,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const newProject = data.project;
+
+        // Add to projects list
+        setProjects((prev) => [newProject, ...prev]);
+
+        // Close dialog
+        setIsDialogOpen(false);
+        setNewProjectName("");
+        setNewProjectDescription("");
+
+        // Navigate to new project
+        setOpenMobile(false);
+        router.push(`/canvas?projectId=${newProject.id}`);
+      } else {
+        console.error("Failed to create project");
+      }
+    } catch (error) {
+      console.error("Error creating project:", error);
+    } finally {
+      setIsCreating(false);
+    }
+  };
 
   const handleDeleteAll = () => {
     const deletePromise = fetch("/api/history", {
@@ -106,7 +208,11 @@ export function CrossMindSidebar({ user }: { user: User | undefined }) {
               <SidebarMenuItem className="flex-1">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <SidebarMenuButton className="w-full data-[state=open]:bg-accent" size="lg">
+                    <SidebarMenuButton
+                      className="w-full data-[state=open]:bg-accent"
+                      size="lg"
+                      disabled={isProjectsLoading}
+                    >
                       <div className="flex items-center gap-3 flex-1 min-w-0">
                         <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground shrink-0">
                           <Command className="size-4" />
@@ -114,7 +220,7 @@ export function CrossMindSidebar({ user }: { user: User | undefined }) {
                         <div className="flex flex-col items-start min-w-0 flex-1">
                           <span className="text-sm font-semibold leading-none">CrossMind</span>
                           <span className="text-xs text-muted-foreground truncate w-full">
-                            {currentProject}
+                            {currentProject?.name || "Select Project"}
                           </span>
                         </div>
                       </div>
@@ -123,29 +229,47 @@ export function CrossMindSidebar({ user }: { user: User | undefined }) {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent
                     align="start"
-                    className="w-[--radix-dropdown-menu-trigger-width]"
+                    className="w-[280px]"
                   >
+                    <DropdownMenuLabel>Projects</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+
+                    {projects.length === 0 ? (
+                      <div className="px-2 py-4 text-center text-sm text-muted-foreground">
+                        No projects yet
+                      </div>
+                    ) : (
+                      projects.map((project) => (
+                        <DropdownMenuItem
+                          key={project.id}
+                          onClick={() => handleSwitchProject(project.id)}
+                          className="flex items-center gap-2 cursor-pointer"
+                        >
+                          <div className="flex size-6 items-center justify-center rounded-md border bg-background shrink-0">
+                            <FolderOpen className="size-3.5" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium truncate text-sm">{project.name}</div>
+                            {project.description && (
+                              <div className="text-xs text-muted-foreground truncate">
+                                {project.description}
+                              </div>
+                            )}
+                          </div>
+                          {currentProjectId === project.id && (
+                            <Check className="size-4 shrink-0" />
+                          )}
+                        </DropdownMenuItem>
+                      ))
+                    )}
+
+                    <DropdownMenuSeparator />
                     <DropdownMenuItem
                       className="gap-2 cursor-pointer"
-                      onClick={() => setCurrentProject("CrossMind MVP")}
+                      onClick={() => setIsDialogOpen(true)}
                     >
-                      <div className="flex size-6 items-center justify-center rounded-md border bg-background">
-                        <FolderOpen className="size-3.5" />
-                      </div>
-                      <span className="flex-1 truncate text-sm">CrossMind MVP</span>
-                      {currentProject === "CrossMind MVP" && (
-                        <span className="text-xs text-muted-foreground">✓</span>
-                      )}
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem className="gap-2 cursor-pointer">
                       <Plus className="size-4" />
                       <span className="text-sm">New Project</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem className="gap-2 cursor-pointer">
-                      <Settings className="size-4" />
-                      <span className="text-sm">Project Settings</span>
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -246,7 +370,12 @@ export function CrossMindSidebar({ user }: { user: User | undefined }) {
           ))}
         </SidebarContent>
 
-        <SidebarFooter>{user && <SidebarUserNav user={user} />}</SidebarFooter>
+        <SidebarFooter>
+          <div className="flex items-center justify-between gap-2 px-2">
+            <ThemeToggle />
+            {user && <div className="flex-1"><SidebarUserNav user={user} /></div>}
+          </div>
+        </SidebarFooter>
         <SidebarRail />
       </Sidebar>
 
@@ -265,6 +394,63 @@ export function CrossMindSidebar({ user }: { user: User | undefined }) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* New Project Dialog */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create New Project</DialogTitle>
+            <DialogDescription>
+              Create a new project to organize your work.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="project-name">Project Name</Label>
+              <Input
+                id="project-name"
+                placeholder="My Awesome Project"
+                value={newProjectName}
+                onChange={(e) => setNewProjectName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleCreateProject();
+                  }
+                }}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="project-description">Description (Optional)</Label>
+              <Textarea
+                id="project-description"
+                placeholder="A brief description of your project..."
+                value={newProjectDescription}
+                onChange={(e) => setNewProjectDescription(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setIsDialogOpen(false)}
+              disabled={isCreating}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreateProject}
+              disabled={!newProjectName.trim() || isCreating}
+            >
+              {isCreating ? "Creating..." : "Create Project"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

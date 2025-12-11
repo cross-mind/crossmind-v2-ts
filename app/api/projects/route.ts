@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/app/(auth)/auth";
+import { getProjectsByUserId, createProject } from "@/lib/db/queries";
 
 export async function GET() {
   const session = await auth();
@@ -9,9 +10,8 @@ export async function GET() {
   }
 
   try {
-    // TODO: Implement getProjectsByUserId in queries.ts
-    // const projects = await getProjectsByUserId(session.user.id as string);
-    return NextResponse.json({ projects: [], message: "Projects API - GET (not yet implemented)" });
+    const projects = await getProjectsByUserId({ userId: session.user.id as string });
+    return NextResponse.json({ projects });
   } catch (error) {
     console.error("Error fetching projects:", error);
     return NextResponse.json({ error: "Failed to fetch projects" }, { status: 500 });
@@ -29,9 +29,17 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { name, description } = body;
 
-    // TODO: Implement createProject in queries.ts
-    // const newProject = await createProject({ name, description, ownerId: session.user.id as string });
-    return NextResponse.json({ message: "Projects API - POST (not yet implemented)" });
+    if (!name || typeof name !== "string" || name.trim().length === 0) {
+      return NextResponse.json({ error: "Project name is required" }, { status: 400 });
+    }
+
+    const newProject = await createProject({
+      name: name.trim(),
+      description: description?.trim() || undefined,
+      ownerId: session.user.id as string
+    });
+
+    return NextResponse.json({ project: newProject }, { status: 201 });
   } catch (error) {
     console.error("Error creating project:", error);
     return NextResponse.json({ error: "Failed to create project" }, { status: 500 });

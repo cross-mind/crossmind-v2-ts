@@ -20,6 +20,17 @@ import {
   type User,
   user,
   vote,
+  canvasNode,
+  type CanvasNode,
+  canvasNodeActivity,
+  type CanvasNodeActivity,
+  canvasNodeComment,
+  type CanvasNodeComment,
+  canvasSuggestion,
+  project,
+  type Project,
+  membership,
+  type Membership,
 } from "./schema";
 import { generateHashedPassword } from "./utils";
 
@@ -470,5 +481,504 @@ export async function getStreamIdsByChatId({ chatId }: { chatId: string }) {
     return streamIds.map(({ id }) => id);
   } catch (_error) {
     throw new ChatSDKError("bad_request:database", "Failed to get stream ids by chat id");
+  }
+}
+
+// ========== Canvas Node Queries ==========
+
+export async function getCanvasNodesByProjectId({ projectId }: { projectId: string }) {
+  try {
+    // Explicitly select all fields to ensure parentId is included
+    // (Drizzle has issues with self-referencing foreign keys when using .select())
+    return await db
+      .select({
+        id: canvasNode.id,
+        projectId: canvasNode.projectId,
+        title: canvasNode.title,
+        content: canvasNode.content,
+        type: canvasNode.type,
+        parentId: canvasNode.parentId,  // Explicitly include parentId
+        children: canvasNode.children,
+        references: canvasNode.references,
+        positions: canvasNode.positions,
+        zoneAffinities: canvasNode.zoneAffinities,
+        tags: canvasNode.tags,
+        healthScore: canvasNode.healthScore,
+        healthLevel: canvasNode.healthLevel,
+        healthData: canvasNode.healthData,
+        taskStatus: canvasNode.taskStatus,
+        assigneeId: canvasNode.assigneeId,
+        dueDate: canvasNode.dueDate,
+        source: canvasNode.source,
+        capturedAt: canvasNode.capturedAt,
+        createdById: canvasNode.createdById,
+        createdAt: canvasNode.createdAt,
+        updatedAt: canvasNode.updatedAt,
+      })
+      .from(canvasNode)
+      .where(eq(canvasNode.projectId, projectId))
+      .orderBy(asc(canvasNode.createdAt));
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to get canvas nodes");
+  }
+}
+
+export async function getCanvasNodeById({ id }: { id: string }) {
+  try {
+    const [node] = await db.select().from(canvasNode).where(eq(canvasNode.id, id));
+    return node;
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to get canvas node");
+  }
+}
+
+export async function createCanvasNode({
+  projectId,
+  title,
+  content,
+  type,
+  parentId,
+  tags,
+  positions,
+  zoneAffinities,
+  taskStatus,
+  assigneeId,
+  dueDate,
+  source,
+  capturedAt,
+  createdById,
+}: {
+  projectId: string;
+  title: string;
+  content: string;
+  type: "document" | "idea" | "task" | "inspiration";
+  parentId?: string;
+  tags?: string[];
+  positions?: Record<string, { x: number; y: number }>;
+  zoneAffinities?: Record<string, Record<string, number>>;
+  taskStatus?: "todo" | "in-progress" | "done";
+  assigneeId?: string;
+  dueDate?: Date;
+  source?: string;
+  capturedAt?: Date;
+  createdById: string;
+}) {
+  try {
+    const [newNode] = await db
+      .insert(canvasNode)
+      .values({
+        projectId,
+        title,
+        content,
+        type,
+        parentId,
+        tags,
+        positions,
+        zoneAffinities,
+        taskStatus,
+        assigneeId,
+        dueDate,
+        source,
+        capturedAt,
+        createdById,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
+
+    // Automatically create activity record
+    await db.insert(canvasNodeActivity).values({
+      nodeId: newNode.id,
+      projectId,
+      userId: createdById,
+      type: "created",
+      description: "created this node",
+      createdAt: new Date(),
+    });
+
+    return newNode;
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to create canvas node");
+  }
+}
+
+export async function updateCanvasNode({
+  id,
+  title,
+  content,
+  positions,
+  tags,
+  taskStatus,
+  assigneeId,
+  dueDate,
+  healthScore,
+  healthLevel,
+  healthData,
+}: {
+  id: string;
+  title?: string;
+  content?: string;
+  positions?: Record<string, { x: number; y: number }>;
+  tags?: string[];
+  taskStatus?: "todo" | "in-progress" | "done";
+  assigneeId?: string;
+  dueDate?: Date;
+  healthScore?: string;
+  healthLevel?: "critical" | "warning" | "good" | "excellent";
+  healthData?: any;
+}) {
+  try {
+    const [updated] = await db
+      .update(canvasNode)
+      .set({
+        ...(title !== undefined && { title }),
+        ...(content !== undefined && { content }),
+        ...(positions !== undefined && { positions }),
+        ...(tags !== undefined && { tags }),
+        ...(taskStatus !== undefined && { taskStatus }),
+        ...(assigneeId !== undefined && { assigneeId }),
+        ...(dueDate !== undefined && { dueDate }),
+        ...(healthScore !== undefined && { healthScore }),
+        ...(healthLevel !== undefined && { healthLevel }),
+        ...(healthData !== undefined && { healthData }),
+        updatedAt: new Date(),
+      })
+      .where(eq(canvasNode.id, id))
+      .returning();
+
+    return updated;
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to update canvas node");
+  }
+}
+
+export async function deleteCanvasNode({ id }: { id: string }) {
+  try {
+    // Cascade delete will handle activities, comments automatically
+    const [deleted] = await db.delete(canvasNode).where(eq(canvasNode.id, id)).returning();
+    return deleted;
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to delete canvas node");
+  }
+}
+
+// ========== Canvas Activities ==========
+
+export async function getCanvasActivities({ nodeId }: { nodeId: string }) {
+  try {
+    return await db
+      .select()
+      .from(canvasNodeActivity)
+      .where(eq(canvasNodeActivity.nodeId, nodeId))
+      .orderBy(desc(canvasNodeActivity.createdAt));
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to get activities");
+  }
+}
+
+export async function createCanvasActivity({
+  nodeId,
+  projectId,
+  userId,
+  type,
+  description,
+  details,
+}: {
+  nodeId: string;
+  projectId: string;
+  userId: string;
+  type: "created" | "updated" | "status_changed" | "tag_added" | "comment_added";
+  description: string;
+  details?: string;
+}) {
+  try {
+    const [newActivity] = await db
+      .insert(canvasNodeActivity)
+      .values({
+        nodeId,
+        projectId,
+        userId,
+        type,
+        description,
+        details,
+        createdAt: new Date(),
+      })
+      .returning();
+
+    return newActivity;
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to create activity");
+  }
+}
+
+// ========== Canvas Comments ==========
+
+export async function getCanvasComments({ nodeId }: { nodeId: string }) {
+  try {
+    return await db
+      .select()
+      .from(canvasNodeComment)
+      .where(eq(canvasNodeComment.nodeId, nodeId))
+      .orderBy(asc(canvasNodeComment.createdAt));
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to get comments");
+  }
+}
+
+export async function createCanvasComment({
+  nodeId,
+  projectId,
+  authorId,
+  content,
+  mentions,
+}: {
+  nodeId: string;
+  projectId: string;
+  authorId: string;
+  content: string;
+  mentions?: string[];
+}) {
+  try {
+    const [newComment] = await db
+      .insert(canvasNodeComment)
+      .values({
+        nodeId,
+        projectId,
+        authorId,
+        content,
+        mentions,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .returning();
+
+    // Also create activity record
+    await db.insert(canvasNodeActivity).values({
+      nodeId,
+      projectId,
+      userId: authorId,
+      type: "comment_added",
+      description: "added a comment",
+      createdAt: new Date(),
+    });
+
+    return newComment;
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to create comment");
+  }
+}
+
+// ========== Health Scoring ==========
+
+export async function updateHealthScore({
+  id,
+  healthScore,
+  healthLevel,
+  healthData,
+}: {
+  id: string;
+  healthScore: number;
+  healthLevel: "critical" | "warning" | "good" | "excellent";
+  healthData: any;
+}) {
+  try {
+    const [updated] = await db
+      .update(canvasNode)
+      .set({
+        healthScore: healthScore.toString(),
+        healthLevel,
+        healthData,
+        updatedAt: new Date(),
+      })
+      .where(eq(canvasNode.id, id))
+      .returning();
+
+    return updated;
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to update health score");
+  }
+}
+
+// ========== Health Check Usage Tracking ==========
+
+export async function getUserById({ id }: { id: string }) {
+  try {
+    const [foundUser] = await db.select().from(user).where(eq(user.id, id));
+    return foundUser;
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to get user by id");
+  }
+}
+
+export async function getHealthCheckUsage({ userId }: { userId: string }) {
+  try {
+    const foundUser = await getUserById({ id: userId });
+    if (!foundUser) throw new Error("User not found");
+
+    const currentMonth = new Date().toISOString().slice(0, 7); // "2025-12"
+    const usage = foundUser.healthCheckUsage;
+
+    // If it's a new month, reset count
+    if (!usage || usage.month !== currentMonth) {
+      return { month: currentMonth, count: 0 };
+    }
+
+    return usage;
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to get health check usage");
+  }
+}
+
+export async function incrementHealthCheckUsage({ userId }: { userId: string }) {
+  try {
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const usage = await getHealthCheckUsage({ userId });
+
+    // Increment count
+    await db
+      .update(user)
+      .set({
+        healthCheckUsage: {
+          month: currentMonth,
+          count: usage.count + 1,
+        },
+      })
+      .where(eq(user.id, userId));
+
+    return { month: currentMonth, count: usage.count + 1 };
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to increment health check usage");
+  }
+}
+
+// Subscription limits configuration
+export const SUBSCRIPTION_LIMITS = {
+  free: { healthChecks: 0 }, // Not available
+  basic: { healthChecks: 100 }, // 100 checks per month
+  pro: { healthChecks: 500 }, // 500 checks per month
+};
+
+// =============================================================================
+// Project Management
+// =============================================================================
+
+/**
+ * Get all projects for a user (owner + member)
+ */
+export async function getProjectsByUserId({ userId }: { userId: string }) {
+  try {
+    return await db
+      .select({
+        id: project.id,
+        name: project.name,
+        description: project.description,
+        ownerId: project.ownerId,
+        workspaceContainerId: project.workspaceContainerId,
+        createdAt: project.createdAt,
+        updatedAt: project.updatedAt,
+        role: membership.role,
+      })
+      .from(project)
+      .innerJoin(membership, eq(membership.projectId, project.id))
+      .where(eq(membership.userId, userId))
+      .orderBy(desc(project.updatedAt));
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to get projects by user ID");
+  }
+}
+
+/**
+ * Get a single project by ID
+ */
+export async function getProjectById({ projectId }: { projectId: string }) {
+  try {
+    const result = await db
+      .select()
+      .from(project)
+      .where(eq(project.id, projectId))
+      .limit(1);
+    return result[0] || null;
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to get project by ID");
+  }
+}
+
+/**
+ * Create a new project
+ */
+export async function createProject({
+  name,
+  description,
+  ownerId,
+}: {
+  name: string;
+  description?: string;
+  ownerId: string;
+}) {
+  try {
+    const now = new Date();
+    const result = await db
+      .insert(project)
+      .values({
+        name,
+        description: description || null,
+        ownerId,
+        workspaceContainerId: null,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
+
+    const newProject = result[0];
+
+    // Add owner to membership
+    await db.insert(membership).values({
+      projectId: newProject.id,
+      userId: ownerId,
+      role: "owner",
+      createdAt: now,
+    });
+
+    return newProject;
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to create project");
+  }
+}
+
+/**
+ * Update a project
+ */
+export async function updateProject({
+  projectId,
+  name,
+  description,
+}: {
+  projectId: string;
+  name?: string;
+  description?: string;
+}) {
+  try {
+    const updates: Partial<Project> = { updatedAt: new Date() };
+    if (name !== undefined) updates.name = name;
+    if (description !== undefined) updates.description = description;
+
+    return await db
+      .update(project)
+      .set(updates)
+      .where(eq(project.id, projectId))
+      .returning();
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to update project");
+  }
+}
+
+/**
+ * Delete a project
+ */
+export async function deleteProject({ projectId }: { projectId: string }) {
+  try {
+    return await db.delete(project).where(eq(project.id, projectId));
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to delete project");
   }
 }

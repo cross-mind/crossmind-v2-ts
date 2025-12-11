@@ -4,7 +4,7 @@
  * as described in the architecture documentation.
  */
 
-import type { LanguageModelV1 } from "@ai-sdk/provider";
+import type { LanguageModelV2 } from "@ai-sdk/provider";
 
 interface WorkspaceModelOptions {
   projectId: string;
@@ -18,7 +18,7 @@ interface WorkspaceModelOptions {
  * - Workspace Container runs agent code in isolated environment
  * - Custom provider bridges the two layers
  */
-export function createWorkspaceModel(options: WorkspaceModelOptions): LanguageModelV1 {
+export function createWorkspaceModel(options: WorkspaceModelOptions): LanguageModelV2 {
   const { projectId, containerId } = options;
 
   // TODO: Implement the actual workspace model provider

@@ -17,6 +17,13 @@ export const user = pgTable("User", {
   id: uuid("id").primaryKey().notNull().defaultRandom(),
   email: varchar("email", { length: 64 }).notNull(),
   password: varchar("password", { length: 64 }),
+
+  // Subscription and usage tracking
+  subscriptionTier: varchar("subscriptionTier", { enum: ["free", "basic", "pro"] }).notNull().default("free"),
+  healthCheckUsage: jsonb("healthCheckUsage").$type<{
+    month: string;  // "2025-12"
+    count: number;  // Current month usage count
+  }>(),
 });
 
 export type User = InferSelectModel<typeof user>;
@@ -193,7 +200,6 @@ export type Project = InferSelectModel<typeof project>;
 export const membership = pgTable(
   "Membership",
   {
-    id: uuid("id").primaryKey().notNull().defaultRandom(),
     projectId: uuid("projectId")
       .notNull()
       .references(() => project.id, { onDelete: "cascade" }),
@@ -204,31 +210,125 @@ export const membership = pgTable(
     createdAt: timestamp("createdAt").notNull(),
   },
   (table) => ({
-    uniqueProjectUser: primaryKey({ columns: [table.projectId, table.userId] }),
+    pk: primaryKey({ columns: [table.projectId, table.userId] }),
   }),
 );
 
 export type Membership = InferSelectModel<typeof membership>;
 
-// Canvas Nodes
+// Canvas Nodes (Extended schema for production features)
 export const canvasNode = pgTable("CanvasNode", {
   id: uuid("id").primaryKey().notNull().defaultRandom(),
   projectId: uuid("projectId")
     .notNull()
     .references(() => project.id, { onDelete: "cascade" }),
+
+  // Core fields
   title: text("title").notNull(),
   content: text("content").notNull(),
+  type: varchar("type", { enum: ["document", "idea", "task", "inspiration"] })
+    .notNull()
+    .default("document"),
+
+  // Hierarchy
+  parentId: uuid("parentId").references((): any => canvasNode.id, { onDelete: "cascade" }),
+  children: uuid("children").array(),
+  references: uuid("references").array(),
+
+  // Multi-framework positioning (stores positions for different frameworks)
+  positions: jsonb("positions"),
+
+  // Zone affinities (framework-to-zone weights for smart placement)
+  zoneAffinities: jsonb("zoneAffinities"),
+
+  // Tags
   tags: text("tags").array(),
-  positionX: varchar("positionX"),
-  positionY: varchar("positionY"),
-  status: varchar("status", {
-    enum: ["not_started", "in_progress", "blocked", "completed"],
-  }),
+
+  // Task-specific fields
+  taskStatus: varchar("taskStatus", { enum: ["todo", "in-progress", "done"] }),
+  assigneeId: uuid("assigneeId").references(() => user.id, { onDelete: "set null" }),
+  dueDate: timestamp("dueDate"),
+
+  // Inspiration-specific fields
+  source: text("source"),
+  capturedAt: timestamp("capturedAt"),
+
+  // Health scoring (premium feature)
+  healthScore: varchar("healthScore"),
+  healthLevel: varchar("healthLevel", { enum: ["critical", "warning", "good", "excellent"] }),
+  healthData: jsonb("healthData"),
+
+  // Metadata
+  createdById: uuid("createdById").references(() => user.id),
   createdAt: timestamp("createdAt").notNull(),
   updatedAt: timestamp("updatedAt").notNull(),
 });
 
 export type CanvasNode = InferSelectModel<typeof canvasNode>;
+
+// Canvas Node Activities
+export const canvasNodeActivity = pgTable("CanvasNodeActivity", {
+  id: uuid("id").primaryKey().notNull().defaultRandom(),
+  nodeId: uuid("nodeId")
+    .notNull()
+    .references(() => canvasNode.id, { onDelete: "cascade" }),
+  projectId: uuid("projectId")
+    .notNull()
+    .references(() => project.id, { onDelete: "cascade" }),
+
+  userId: uuid("userId").references(() => user.id),
+  type: varchar("type", {
+    enum: ["created", "updated", "status_changed", "tag_added", "comment_added"],
+  }).notNull(),
+  description: text("description").notNull(),
+  details: text("details"),
+
+  createdAt: timestamp("createdAt").notNull(),
+});
+
+export type CanvasNodeActivity = InferSelectModel<typeof canvasNodeActivity>;
+
+// Canvas Node Comments
+export const canvasNodeComment = pgTable("CanvasNodeComment", {
+  id: uuid("id").primaryKey().notNull().defaultRandom(),
+  nodeId: uuid("nodeId")
+    .notNull()
+    .references(() => canvasNode.id, { onDelete: "cascade" }),
+  projectId: uuid("projectId")
+    .notNull()
+    .references(() => project.id, { onDelete: "cascade" }),
+
+  authorId: uuid("authorId").references(() => user.id),
+  content: text("content").notNull(),
+  mentions: uuid("mentions").array(),
+
+  createdAt: timestamp("createdAt").notNull(),
+  updatedAt: timestamp("updatedAt").notNull(),
+});
+
+export type CanvasNodeComment = InferSelectModel<typeof canvasNodeComment>;
+
+// Canvas Suggestions (AI-generated suggestions for improvement)
+export const canvasSuggestion = pgTable("CanvasSuggestion", {
+  id: uuid("id").primaryKey().notNull().defaultRandom(),
+  projectId: uuid("projectId")
+    .notNull()
+    .references(() => project.id, { onDelete: "cascade" }),
+
+  type: varchar("type", {
+    enum: ["add-node", "add-tag", "refine-content", "health-issue"],
+  }).notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  nodeId: uuid("nodeId").references(() => canvasNode.id, { onDelete: "set null" }),
+
+  status: varchar("status", { enum: ["pending", "accepted", "dismissed"] })
+    .notNull()
+    .default("pending"),
+  createdAt: timestamp("createdAt").notNull(),
+});
+
+export type CanvasSuggestion = InferSelectModel<typeof canvasSuggestion>;
 
 // Tasks
 export const task = pgTable("Task", {
@@ -259,7 +359,6 @@ export type Task = InferSelectModel<typeof task>;
 export const taskTag = pgTable(
   "TaskTag",
   {
-    id: uuid("id").primaryKey().notNull().defaultRandom(),
     taskId: uuid("taskId")
       .notNull()
       .references(() => task.id, { onDelete: "cascade" }),
@@ -268,7 +367,7 @@ export const taskTag = pgTable(
     createdAt: timestamp("createdAt").notNull(),
   },
   (table) => ({
-    uniqueTaskTag: primaryKey({
+    pk: primaryKey({
       columns: [table.taskId, table.namespace, table.value],
     }),
   }),
