@@ -7,6 +7,7 @@ import { CanvasControls } from "./CanvasControls";
 import { StageFilter, type StageFilterType } from "./StageFilter";
 import type { CanvasNode, ThinkingFramework } from "../canvas-data";
 import type { NODE_TYPE_CONFIG } from "../node-type-config";
+import type { DropPosition } from "../lib/drag-drop-helpers";
 
 interface CanvasAreaProps {
   canvasRef: React.RefObject<HTMLDivElement>;
@@ -38,6 +39,10 @@ interface CanvasAreaProps {
   onWheel?: (e: WheelEvent) => void; // Optional wheel handler from useZoomPan
   onMouseMove?: (e: MouseEvent) => void; // Optional mouse move handler
   onMouseUp?: () => void; // Optional mouse up handler
+  // Drag-drop state
+  activeNodeId?: string | null;
+  overNodeId?: string | null;
+  dropPosition?: DropPosition;
 }
 
 export function CanvasArea({
@@ -70,6 +75,9 @@ export function CanvasArea({
   onWheel,
   onMouseMove,
   onMouseUp,
+  activeNodeId,
+  overNodeId,
+  dropPosition,
 }: CanvasAreaProps) {
   // Setup event listeners in this component where refs are actually attached
   useLayoutEffect(() => {
@@ -117,6 +125,16 @@ export function CanvasArea({
       onClick={() => onSelectedNodeChange(null)}
       style={{ cursor: "grab" }}
     >
+      {/* Fixed grid background - outside transform container */}
+      <div
+        className="absolute inset-0 opacity-20 pointer-events-none"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle, currentColor 1px, transparent 1px)",
+          backgroundSize: "20px 20px",
+        }}
+      />
+
       {/* Unified transform container for zones and nodes */}
       <div
         ref={transformRef}
@@ -140,16 +158,6 @@ export function CanvasArea({
           />
         </div>
 
-        {/* Grid background */}
-        <div
-          className="absolute inset-0 opacity-20 pointer-events-none"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle, currentColor 1px, transparent 1px)",
-            backgroundSize: "20px 20px",
-          }}
-        />
-
         {/* Nodes */}
         <div ref={nodesContainerRef} className="absolute inset-0">
         {visibleNodes.filter((node) => !node.parentId).map((node) => (
@@ -169,6 +177,8 @@ export function CanvasArea({
             }}
             matchesFilter={matchesFilter}
             stageFilter={stageFilter}
+            overNodeId={overNodeId}
+            dropPosition={dropPosition}
           />
         ))}
         </div>

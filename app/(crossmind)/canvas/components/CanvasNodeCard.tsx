@@ -14,7 +14,80 @@ import {
 import React from "react";
 import { HealthPopover } from "./HealthPopover";
 import { NodeHealthBadge } from "./NodeHealthBadge";
+import { DropIndicator } from "./DropIndicator";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
+import { GripVertical } from "lucide-react";
 import type { CanvasNode } from "../canvas-data";
+
+// 子节点卡片组件（支持拖放）
+function ChildNodeCard({
+  child,
+  childConfig,
+  grandChildren,
+  onNodeClick,
+  overNodeId,
+  dropPosition,
+}: {
+  child: CanvasNode;
+  childConfig: NodeTypeConfig;
+  grandChildren: CanvasNode[];
+  onNodeClick: (node: CanvasNode, e: React.MouseEvent) => void;
+  overNodeId: string | null;
+  dropPosition: "top" | "bottom" | "center" | null;
+}) {
+  // 子节点也可以被拖动
+  const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
+    id: child.id,
+    data: { node: child },
+  });
+
+  // 子节点也可以作为拖放目标
+  const { setNodeRef: setDropRef } = useDroppable({
+    id: child.id,
+    data: { node: child },
+  });
+
+  // 合并 refs
+  const setRefs = (el: HTMLDivElement | null) => {
+    setDragRef(el);
+    setDropRef(el);
+  };
+
+  const isChildDragOver = overNodeId === child.id;
+
+  return (
+    <div className="relative">
+      {/* Drop indicators for child nodes */}
+      <DropIndicator position="top" isActive={isChildDragOver && dropPosition === "top"} />
+      <DropIndicator position="bottom" isActive={isChildDragOver && dropPosition === "bottom"} />
+
+      <div
+        ref={setRefs}
+        data-node-id={child.id}
+        {...listeners}
+        {...attributes}
+        className={cn(
+          "flex items-center gap-2 py-1 px-2 -ml-4 pl-6 rounded-lg cursor-grab active:cursor-grabbing group/child transition-all",
+          isDragging && "opacity-50 scale-95 cursor-grabbing",
+          isChildDragOver && dropPosition === "center" && "ring-2 ring-primary ring-offset-1 bg-primary/5",
+          !isDragging && !isChildDragOver && "hover:bg-muted/50"
+        )}
+        onClick={(e) => {
+          e.stopPropagation();
+          onNodeClick(child, e);
+        }}
+      >
+        <div className={cn("h-1.5 w-1.5 rounded-full shrink-0", childConfig.color)} />
+        <span className="text-xs font-medium flex-1 truncate">{child.title}</span>
+        {grandChildren.length > 0 && (
+          <span className="text-[10px] text-muted-foreground shrink-0">
+            +{grandChildren.length}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
 
 interface NodeTypeConfig {
   emoji: string;
@@ -34,6 +107,9 @@ interface CanvasNodeCardProps {
   onNodeRefSet: (id: string, el: HTMLDivElement | null) => void;
   matchesFilter: (node: CanvasNode) => boolean;
   stageFilter: string;
+  // Drag-drop props
+  overNodeId?: string | null;
+  dropPosition?: "top" | "bottom" | "center" | null;
 }
 
 export function CanvasNodeCard({
@@ -47,11 +123,33 @@ export function CanvasNodeCard({
   onNodeRefSet,
   matchesFilter,
   stageFilter,
+  overNodeId,
+  dropPosition,
 }: CanvasNodeCardProps) {
   const config = nodeTypeConfig[node.type];
   const Icon = config.icon;
   const isMatching = matchesFilter(node);
   const isHighlighted = stageFilter === "all" || isMatching;
+
+  const isDragOver = overNodeId === node.id;
+
+  // Drag-drop hooks
+  const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
+    id: node.id,
+    data: { node },
+  });
+
+  const { setNodeRef: setDropRef } = useDroppable({
+    id: node.id,
+    data: { node },
+  });
+
+  // Merge refs for both drag and drop
+  const setCardRef = (el: HTMLDivElement | null) => {
+    setDragRef(el);
+    setDropRef(el);
+    onNodeRefSet(node.id, el);
+  };
 
   // Recursive function to render child nodes as nested tree items
   const renderChildren = (parentId: string, level: number = 1): React.ReactNode => {
@@ -78,21 +176,14 @@ export function CanvasNodeCard({
                 <div className="absolute left-[11px] top-[12px] w-[13px] h-px bg-border" />
               </div>
 
-              <div
-                className="flex items-center gap-2 py-1 px-2 -ml-4 pl-6 rounded-lg hover:bg-muted/50 cursor-pointer group/child transition-colors"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onNodeClick(child, e);
-                }}
-              >
-                <div className={cn("h-1.5 w-1.5 rounded-full shrink-0", childConfig.color)} />
-                <span className="text-xs font-medium flex-1 truncate">{child.title}</span>
-                {grandChildren.length > 0 && (
-                  <span className="text-[10px] text-muted-foreground shrink-0">
-                    +{grandChildren.length}
-                  </span>
-                )}
-              </div>
+              <ChildNodeCard
+                child={child}
+                childConfig={childConfig}
+                grandChildren={grandChildren}
+                onNodeClick={onNodeClick}
+                overNodeId={overNodeId}
+                dropPosition={dropPosition}
+              />
 
               {/* Render grandchildren recursively */}
               {grandChildren.length > 0 && renderChildren(child.id, level + 1)}
@@ -106,15 +197,23 @@ export function CanvasNodeCard({
   return (
     <HealthPopover node={node}>
       <div
-        ref={(el) => onNodeRefSet(node.id, el)}
+        ref={setCardRef}
+        data-node-id={node.id}
+        {...listeners}
+        {...attributes}
         className={cn(
-          "absolute w-80 p-4 bg-background border-2 rounded-xl shadow-sm cursor-pointer group select-none",
+          "absolute w-80 p-4 bg-background border-2 rounded-xl shadow-sm group select-none cursor-grab active:cursor-grabbing",
           "transition-all duration-300 ease-out",
           selectedNodeId === node.id
             ? "border-primary shadow-lg scale-105 z-10"
             : isHighlighted
               ? "border-border hover:border-primary/50 hover:shadow-md"
               : "border-border/30 opacity-40 hover:opacity-60",
+          isDragging && "opacity-50 scale-95 cursor-grabbing",
+          // Enhanced visual feedback for drop positions
+          isDragOver && dropPosition === "center" && "ring-4 ring-primary ring-offset-2 bg-primary/5",
+          isDragOver && dropPosition === "top" && "border-t-4 border-t-primary",
+          isDragOver && dropPosition === "bottom" && "border-b-4 border-b-primary"
         )}
         style={{
           left: node.position.x,
@@ -123,6 +222,9 @@ export function CanvasNodeCard({
         }}
         onClick={(e) => onNodeClick(node, e)}
       >
+        {/* Drop indicators for parent nodes */}
+        <DropIndicator position="top" isActive={isDragOver === true && dropPosition === "top"} />
+        <DropIndicator position="bottom" isActive={isDragOver === true && dropPosition === "bottom"} />
         {/* Health Badge */}
         <NodeHealthBadge node={node} />
 
@@ -256,9 +358,10 @@ export function CanvasNodeCard({
           </div>
         )}
 
-        {/* Hover Actions */}
-        <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-          <div className="flex gap-1 bg-background border border-border rounded-lg shadow-lg p-1">
+        {/* Hover Actions - hide when dragging */}
+        {!isDragging && (
+          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="flex gap-1 bg-background border border-border rounded-lg shadow-lg p-1">
             <Button
               variant="ghost"
               size="sm"
@@ -285,6 +388,7 @@ export function CanvasNodeCard({
             </Button>
           </div>
         </div>
+        )}
       </div>
     </HealthPopover>
   );
