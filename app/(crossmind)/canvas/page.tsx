@@ -291,7 +291,14 @@ export default function CanvasPage() {
       return;
     }
 
+    // Close panel if the deleted node was selected
+    if (selectedNode?.id === node.id) {
+      setSelectedNode(null);
+      setShowAIChat(false);
+    }
+
     try {
+      // Call API first
       const response = await fetch(`/api/canvas/${node.id}`, {
         method: "DELETE",
       });
@@ -300,13 +307,8 @@ export default function CanvasPage() {
         throw new Error("Failed to delete node");
       }
 
-      // Close panel if the deleted node was selected
-      if (selectedNode?.id === node.id) {
-        setSelectedNode(null);
-        setShowAIChat(false);
-      }
-
-      // Refresh data
+      // Revalidate to get fresh data from server
+      // Layout logic will handle preserving positions of remaining nodes
       await mutate();
     } catch (error) {
       console.error("Error deleting node:", error);
@@ -373,13 +375,34 @@ export default function CanvasPage() {
         const nodesAdded = nodeContents.some(n => !prevNodeIds.has(n.id));
         const nodesRemoved = nodes.some(n => !newNodeIds.has(n.id));
 
-        if (nodesAdded || nodesRemoved || nodes.length === 0) {
-          // Nodes added/removed - need full recalculation
-          console.log('[Layout] Nodes added/removed, triggering full recalculation');
+        // Check if displayOrder changed (for drag-drop reordering)
+        const displayOrderChanged = nodes.some(n => {
+          const updatedNode = nodeContents.find(nc => nc.id === n.id);
+          return updatedNode && updatedNode.displayOrder !== n.displayOrder;
+        });
+
+        if (nodesAdded && nodes.length > 0) {
+          // Only added nodes - need full recalculation
+          console.log('[Layout] Nodes added, triggering full recalculation');
           setLayoutCalculated(false);
           setNodes([]); // Clear nodes to trigger fresh layout calculation
+        } else if (nodesRemoved) {
+          // Nodes removed - trigger recalculation only for affected zones
+          console.log('[Layout] Nodes removed, recalculating layout for affected zones');
+          setLayoutCalculated(false);
+          setNodes([]); // Clear to trigger fresh layout calculation
+        } else if (nodes.length === 0) {
+          // Initial load
+          console.log('[Layout] Initial load, triggering layout calculation');
+          setLayoutCalculated(false);
+          setNodes([]);
+        } else if (displayOrderChanged) {
+          // DisplayOrder changed (drag-drop) - need recalculation
+          console.log('[Layout] DisplayOrder changed, triggering recalculation');
+          setLayoutCalculated(false);
+          setNodes([]); // Clear to trigger fresh layout
         } else {
-          // Only data changed (displayOrder, parentId) - update in place
+          // Only other data changed - update in place
           console.log('[Layout] Only data properties changed, updating without position reset');
           setNodes(prevNodes =>
             prevNodes.map(prevNode => {
@@ -389,8 +412,6 @@ export default function CanvasPage() {
                 : prevNode;
             })
           );
-          // Mark as needing recalculation but don't clear positions
-          setLayoutCalculated(false);
         }
       }
 

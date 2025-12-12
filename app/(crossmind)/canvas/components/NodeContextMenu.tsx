@@ -36,7 +36,7 @@ export function NodeContextMenu({
           }}
         >
           <Sparkles className="mr-2 h-4 w-4" />
-          <span>CrossMind</span>
+          <span>Ask AI</span>
         </ContextMenuItem>
         <ContextMenuItem
           onClick={(e) => {
