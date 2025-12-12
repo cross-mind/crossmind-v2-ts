@@ -6,6 +6,7 @@ import {
   jsonb,
   pgTable,
   primaryKey,
+  real,
   text,
   timestamp,
   uuid,
@@ -243,6 +244,9 @@ export const canvasNode = pgTable("CanvasNode", {
 
   // Tags
   tags: text("tags").array(),
+
+  // Display order for sorting (used for drag-drop reordering)
+  displayOrder: real("displayOrder").notNull().default(0),
 
   // Task-specific fields
   taskStatus: varchar("taskStatus", { enum: ["todo", "in-progress", "done"] }),

@@ -47,6 +47,11 @@ const updateNodeSchema = z.object({
   content: z.string().optional(),
   positions: z.record(z.object({ x: z.number(), y: z.number() })).optional(),
   tags: z.array(z.string()).optional(),
+  // Drag-drop support fields
+  displayOrder: z.number().optional(),
+  parentId: z.string().uuid().nullable().optional(),
+  zoneAffinities: z.record(z.record(z.number())).optional(),
+  // Task fields
   taskStatus: z.enum(["todo", "in-progress", "done"]).optional(),
   assigneeId: z.string().uuid().optional(),
   dueDate: z.string().datetime().optional(),

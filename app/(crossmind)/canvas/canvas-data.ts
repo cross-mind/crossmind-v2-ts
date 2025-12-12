@@ -19,6 +19,8 @@ export interface NodeContent {
   parentId?: string;
   children?: string[];
   references?: string[];
+  // Display order for sorting (drag-drop support)
+  displayOrder?: number;
   // Task-specific
   taskStatus?: "todo" | "in-progress" | "done";
   assignee?: string;

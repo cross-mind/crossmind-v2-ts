@@ -10,13 +10,14 @@
       "Bash(npx shadcn@latest add:*)",
       "Bash(ls:*)",
       "Bash(npm run build:*)",
-      "Bash(npm run dev:*)"
+      "Bash(npm run dev:*)",
+      "Bash(pnpm db:generate:*)"
     ],
     "deny": [],
     "ask": []
   },
   "hooks": {
-    "Stop": [
+    "SessionEnd": [
       {
         "hooks": [
           {

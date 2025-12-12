@@ -31,6 +31,7 @@ interface CanvasAreaProps {
   onNodeClick: (node: CanvasNode, e: React.MouseEvent) => void;
   onOpenAIChat: (node: CanvasNode) => void;
   onAddChild: (parentNode: CanvasNode) => void;
+  onDelete: (node: CanvasNode) => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onReset: () => void;
@@ -67,6 +68,7 @@ export function CanvasArea({
   onNodeClick,
   onOpenAIChat,
   onAddChild,
+  onDelete,
   onZoomIn,
   onZoomOut,
   onReset,
@@ -170,6 +172,7 @@ export function CanvasArea({
             onNodeClick={onNodeClick}
             onOpenAIChat={onOpenAIChat}
             onAddChild={onAddChild}
+            onDelete={onDelete}
             onNodeRefSet={(id, el) => {
               if (el) {
                 nodeRefs.current.set(id, el);

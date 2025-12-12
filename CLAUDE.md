@@ -522,6 +522,63 @@ const data = useMemo(() => {
 - 不能同时有单独的 `id` 主键和复合主键
 - 只保留复合主键：`primaryKey({ columns: [table.a, table.b] })`
 
+### Canvas Drag-Drop Animation Issue
+- **Issue**: After drag-drop, nodes "fly in from left side" instead of smoothly transitioning from current position
+- **Root Cause**: Data change detection was calling `setNodes([])`, causing layout algorithm to reset all positions to off-screen `{ x: -9999, y: -9999 }` for measurement
+- **Solution**: Distinguish between "node add/remove" (needs full reset) vs "data only change" (preserve positions):
+```typescript
+// In data change detection useEffect:
+if (nodesAdded || nodesRemoved) {
+  setNodes([]); // Full recalculation
+} else {
+  // Preserve positions during data updates
+  setNodes(prevNodes => prevNodes.map(prevNode => ({
+    ...updatedContent,
+    position: prevNode.position // Keep existing position
+  })));
+}
+```
+- **Result**: Nodes now smoothly transition via CSS `transition-all duration-300` from current position to new calculated position
+- **Documentation**: See [DRAG_DROP_ANIMATION_FIX.md](DRAG_DROP_ANIMATION_FIX.md) for complete analysis
+
+### Canvas Drag-Drop Zone Isolation Issue
+- **Issue**: Dragging one node causes nodes in other zones to move unexpectedly
+- **Root Cause**: Layout algorithm used unstable greedy column assignment + nodes not sorted by displayOrder
+- **Problems**:
+  1. `rootNodeIds` not sorted → random iteration order → unstable positions
+  2. Greedy algorithm `indexOf(Math.min(...))` → column selection depends on other nodes' heights → nodes jump between columns
+- **Solution**: Stable layout algorithm with two key changes:
+```typescript
+// 1. Sort by displayOrder before layout
+const sortedRootNodeIds = rootNodeIds.sort((a, b) => {
+  return (contentA?.displayOrder ?? 0) - (contentB?.displayOrder ?? 0);
+});
+
+// 2. Use round-robin column assignment (not greedy)
+sortedRootNodeIds.forEach((nodeId, index) => {
+  const currentColumn = index % config.columnCount; // Stable assignment
+  // ...
+});
+```
+- **Result**: Same displayOrder + same nodeHeights → same positions every time. Dragging a node only affects nodes in the same zone.
+- **Trade-off**: Columns may not be perfectly balanced in height, but positions are stable and predictable
+- **Documentation**: See [DRAG_DROP_ZONE_ISOLATION_FIX.md](DRAG_DROP_ZONE_ISOLATION_FIX.md) for complete analysis
+
+### Canvas Drag-Drop Zone Stability Issue (Critical)
+- **Issue**: Nodes randomly jump between zones after every drag operation, with no discernible pattern
+- **Root Cause**: ALL nodes lack `zoneAffinities` data, triggering fallback logic that used unstable array index `indexOf(node)`
+- **Why indexOf() is unstable**: Array order in `nodeContents` can change after SWR refetch, causing same node to get different index → different zone
+- **Solution**: Use stable displayOrder-based hashing instead of array index:
+```typescript
+// Fallback zone assignment (when no zoneAffinities)
+const displayOrder = node.displayOrder ?? 0;
+const assignedZoneIndex = Math.floor(displayOrder / 10000) % zoneCount;
+const fallbackZone = currentFramework.zones[assignedZoneIndex].id;
+```
+- **Algorithm**: Divides displayOrder space into 10000-unit segments (0-9999 → zone 0, 10000-19999 → zone 1, etc.)
+- **Result**: Same displayOrder → same zone assignment, always. Small drag adjustments (±1000) stay in same zone. Only large moves (10000+) change zones.
+- **Documentation**: See [DRAG_DROP_ZONE_STABILITY_FIX.md](DRAG_DROP_ZONE_STABILITY_FIX.md) for complete analysis
+
 ## Debugging
 
 ### Canvas Data Flow

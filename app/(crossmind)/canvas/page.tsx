@@ -46,6 +46,8 @@ import { NodeDialog } from "./components/NodeDialog";
 import { TagDialog } from "./components/TagDialog";
 import { useCanvasActions } from "./hooks/useCanvasActions";
 import { useZoomPan } from "./hooks/useZoomPan";
+import { useCanvasDragDrop } from "./hooks/useCanvasDragDrop";
+import { DndContext, DragOverlay, pointerWithin } from "@dnd-kit/core";
 
 export default function CanvasPage() {
   // Get projectId from URL
@@ -53,7 +55,7 @@ export default function CanvasPage() {
   const projectId = searchParams.get("projectId");
 
   // Fetch real Canvas nodes from database
-  const { nodes: dbNodes, isLoading, isError } = useCanvasNodes(projectId);
+  const { nodes: dbNodes, isLoading, isError, mutate } = useCanvasNodes(projectId);
 
   // Convert database nodes to Canvas format
   const nodeContents = useMemo<NodeContent[]>(() => {
@@ -92,6 +94,7 @@ export default function CanvasPage() {
       health: dbNode.healthScore ? Number.parseInt(dbNode.healthScore) : undefined,
       references: dbNode.references || [],
       children: dbNode.children || [],
+      displayOrder: dbNode.displayOrder, // Include displayOrder for drag-drop
     }));
   }, [dbNodes, projectId, isLoading, isError]);
 
@@ -100,6 +103,9 @@ export default function CanvasPage() {
   const nodeRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const [layoutCalculated, setLayoutCalculated] = useState(false);
   const [zoneBounds, setZoneBounds] = useState<Record<string, { width: number; height: number }>>({});
+
+  // Track previous data hash to detect changes
+  const prevDataHashRef = useRef<string>('');
 
   const [selectedNode, setSelectedNode] = useState<CanvasNode | null>(null);
   const [suggestions] = useState<AISuggestion[]>(MOCK_SUGGESTIONS);
@@ -174,10 +180,34 @@ export default function CanvasPage() {
 
         configs[bestZone].nodeIds.push(node.id);
       } else {
-        // Fallback: distribute nodes without affinity data evenly across zones
+        // Fallback: distribute nodes without affinity data based on displayOrder
+        // Use displayOrder (stable) instead of array index (unstable) for zone assignment
         const zoneCount = currentFramework.zones.length;
-        const nodeIndex = nodeContents.indexOf(node);
-        const assignedZoneIndex = nodeIndex % zoneCount;
+
+        // Safety check: ensure we have zones
+        if (zoneCount === 0) {
+          console.warn('[Layout] No zones available in framework:', currentFramework.id);
+          return;
+        }
+
+        const displayOrder = node.displayOrder ?? 0;
+
+        // Hash displayOrder to get stable zone assignment
+        // Nodes with similar displayOrder will be in nearby zones
+        // Use Math.abs to handle negative displayOrder values
+        const assignedZoneIndex = Math.abs(Math.floor(displayOrder / 10000)) % zoneCount;
+
+        // Safety check: ensure index is valid
+        if (assignedZoneIndex < 0 || assignedZoneIndex >= zoneCount) {
+          console.error('[Layout] Invalid zone index:', {
+            assignedZoneIndex,
+            zoneCount,
+            displayOrder,
+            nodeId: node.id
+          });
+          return;
+        }
+
         const fallbackZone = currentFramework.zones[assignedZoneIndex].id;
         configs[fallbackZone].nodeIds.push(node.id);
       }
@@ -209,6 +239,22 @@ export default function CanvasPage() {
     handleMouseUp,
   } = useZoomPan();
 
+  // Drag-drop hook (handles node reordering, hierarchy, and zone changes)
+  const {
+    sensors,
+    activeNodeId,
+    overNodeId,
+    dropPosition,
+    handleDragStart,
+    handleDragOver,
+    handleDragMove,
+    handleDragEnd,
+  } = useCanvasDragDrop({
+    nodes,
+    projectId: projectId || "",
+    currentFrameworkId: currentFramework.id,
+  });
+
   // These refs are still needed for layout calculations
   const zonesContainerRef = useRef<HTMLDivElement>(null);
   const nodesContainerRef = useRef<HTMLDivElement>(null);
@@ -238,6 +284,34 @@ export default function CanvasPage() {
     // Attach document reference to input
     const reference = `📄 Reference Document: "${node.title}"\n\n`;
     setAiInput(reference);
+  };
+
+  const handleDelete = async (node: CanvasNode) => {
+    if (!confirm(`确定要删除节点"${node.title}"吗？这将同时删除其所有子节点。`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/canvas/${node.id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to delete node");
+      }
+
+      // Close panel if the deleted node was selected
+      if (selectedNode?.id === node.id) {
+        setSelectedNode(null);
+        setShowAIChat(false);
+      }
+
+      // Refresh data
+      await mutate();
+    } catch (error) {
+      console.error("Error deleting node:", error);
+      alert("删除节点失败，请重试");
+    }
   };
 
   const handleSendAIMessage = () => {
@@ -275,6 +349,54 @@ export default function CanvasPage() {
       return `[📎 ${title}](#${nodeId})`;
     });
   };
+
+  // Reset layout when data changes (e.g., after drag-drop update via SWR)
+  useEffect(() => {
+    if (dbNodes && dbNodes.length > 0) {
+      // Create a stable hash of node data to detect actual changes
+      const dataHash = dbNodes
+        .map(n => `${n.id}-${n.displayOrder}-${n.parentId || 'null'}`)
+        .sort()
+        .join('|');
+
+      if (prevDataHashRef.current && prevDataHashRef.current !== dataHash) {
+        console.log('[Layout] Data changed, updating nodes while preserving positions', {
+          prevHash: prevDataHashRef.current.substring(0, 100),
+          newHash: dataHash.substring(0, 100)
+        });
+
+        // Update node data while preserving existing positions
+        // Only recalculate layout if nodes are added/removed
+        const prevNodeIds = new Set(nodes.map(n => n.id));
+        const newNodeIds = new Set(nodeContents.map(n => n.id));
+
+        const nodesAdded = nodeContents.some(n => !prevNodeIds.has(n.id));
+        const nodesRemoved = nodes.some(n => !newNodeIds.has(n.id));
+
+        if (nodesAdded || nodesRemoved || nodes.length === 0) {
+          // Nodes added/removed - need full recalculation
+          console.log('[Layout] Nodes added/removed, triggering full recalculation');
+          setLayoutCalculated(false);
+          setNodes([]); // Clear nodes to trigger fresh layout calculation
+        } else {
+          // Only data changed (displayOrder, parentId) - update in place
+          console.log('[Layout] Only data properties changed, updating without position reset');
+          setNodes(prevNodes =>
+            prevNodes.map(prevNode => {
+              const updatedContent = nodeContents.find(nc => nc.id === prevNode.id);
+              return updatedContent
+                ? { ...updatedContent, position: prevNode.position } // Keep existing position
+                : prevNode;
+            })
+          );
+          // Mark as needing recalculation but don't clear positions
+          setLayoutCalculated(false);
+        }
+      }
+
+      prevDataHashRef.current = dataHash;
+    }
+  }, [dbNodes, nodes, nodeContents]);
 
   // Calculate layout dynamically after nodes are rendered
   useEffect(() => {
@@ -329,12 +451,22 @@ export default function CanvasPage() {
           return content && !content.parentId;
         });
 
-        rootNodeIds.forEach((nodeId) => {
+        // Sort by displayOrder to maintain stable positioning
+        const sortedRootNodeIds = rootNodeIds.sort((a, b) => {
+          const contentA = nodeContents.find(n => n.id === a);
+          const contentB = nodeContents.find(n => n.id === b);
+          const orderA = contentA?.displayOrder ?? 0;
+          const orderB = contentB?.displayOrder ?? 0;
+          return orderA - orderB;
+        });
+
+        sortedRootNodeIds.forEach((nodeId, index) => {
           const content = nodeContents.find((n) => n.id === nodeId);
           if (!content) return;
 
-          // Find the shortest column to place the next node (greedy algorithm for better balance)
-          const currentColumn = currentYInColumn.indexOf(Math.min(...currentYInColumn));
+          // Use round-robin column assignment for stability
+          // This ensures same displayOrder always produces same column
+          const currentColumn = index % config.columnCount;
           const x = config.startX + currentColumn * (NODE_WIDTH + COLUMN_GAP);
           const y = currentYInColumn[currentColumn];
 
@@ -462,9 +594,17 @@ export default function CanvasPage() {
   }
 
   return (
-    <div className="h-full w-full flex flex-col bg-background overflow-hidden">
-      {/* Header */}
-      <CanvasHeader
+    <DndContext
+      sensors={sensors}
+      collisionDetection={pointerWithin}
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragMove={handleDragMove}
+      onDragEnd={handleDragEnd}
+    >
+      <div className="h-full w-full flex flex-col bg-background overflow-hidden">
+        {/* Header */}
+        <CanvasHeader
         currentFramework={currentFramework}
         onFrameworkChange={handleFrameworkChange}
         nodes={nodes}
@@ -496,6 +636,7 @@ export default function CanvasPage() {
           onNodeClick={handleNodeClick}
           onOpenAIChat={handleOpenAIChat}
           onAddChild={handleAddChild}
+          onDelete={handleDelete}
           onZoomIn={handleZoomIn}
           onZoomOut={handleZoomOut}
           onReset={handleZoomReset}
@@ -504,6 +645,9 @@ export default function CanvasPage() {
           onWheel={handleWheel}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
+          activeNodeId={activeNodeId}
+          overNodeId={overNodeId}
+          dropPosition={dropPosition}
         />
 
         {/* Right Panel */}
@@ -551,6 +695,7 @@ export default function CanvasPage() {
         onSubmit={handleSubmitTag}
         existingTags={tagDialogNodeId ? nodes.find((n) => n.id === tagDialogNodeId)?.tags || [] : []}
       />
-    </div>
+      </div>
+    </DndContext>
   );
 }

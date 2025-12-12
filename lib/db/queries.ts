@@ -503,6 +503,7 @@ export async function getCanvasNodesByProjectId({ projectId }: { projectId: stri
         positions: canvasNode.positions,
         zoneAffinities: canvasNode.zoneAffinities,
         tags: canvasNode.tags,
+        displayOrder: canvasNode.displayOrder,  // Added for drag-drop sorting
         healthScore: canvasNode.healthScore,
         healthLevel: canvasNode.healthLevel,
         healthData: canvasNode.healthData,
@@ -517,7 +518,7 @@ export async function getCanvasNodesByProjectId({ projectId }: { projectId: stri
       })
       .from(canvasNode)
       .where(eq(canvasNode.projectId, projectId))
-      .orderBy(asc(canvasNode.createdAt));
+      .orderBy(asc(canvasNode.displayOrder));  // Sort by displayOrder instead of createdAt
   } catch (_error) {
     throw new ChatSDKError("bad_request:database", "Failed to get canvas nodes");
   }
@@ -608,6 +609,9 @@ export async function updateCanvasNode({
   content,
   positions,
   tags,
+  displayOrder,
+  parentId,
+  zoneAffinities,
   taskStatus,
   assigneeId,
   dueDate,
@@ -620,6 +624,9 @@ export async function updateCanvasNode({
   content?: string;
   positions?: Record<string, { x: number; y: number }>;
   tags?: string[];
+  displayOrder?: number;
+  parentId?: string | null;
+  zoneAffinities?: Record<string, Record<string, number>>;
   taskStatus?: "todo" | "in-progress" | "done";
   assigneeId?: string;
   dueDate?: Date;
@@ -635,6 +642,9 @@ export async function updateCanvasNode({
         ...(content !== undefined && { content }),
         ...(positions !== undefined && { positions }),
         ...(tags !== undefined && { tags }),
+        ...(displayOrder !== undefined && { displayOrder }),
+        ...(parentId !== undefined && { parentId }),
+        ...(zoneAffinities !== undefined && { zoneAffinities }),
         ...(taskStatus !== undefined && { taskStatus }),
         ...(assigneeId !== undefined && { assigneeId }),
         ...(dueDate !== undefined && { dueDate }),

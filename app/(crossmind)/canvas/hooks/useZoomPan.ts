@@ -102,9 +102,22 @@ export function useZoomPan() {
 
   /**
    * Handle mouse drag pan
+   * Supports:
+   * - Middle mouse button
+   * - Left click + Cmd/Ctrl
+   * - Left click on empty canvas area (not on nodes)
    */
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (e.button === 1 || (e.button === 0 && e.metaKey)) {
+    const target = e.target as HTMLElement;
+
+    // Check if clicking on a node or its children
+    const isNodeClick = target.closest('[data-node-id]');
+
+    // Enable pan if:
+    // 1. Middle mouse button, or
+    // 2. Left click + Cmd/Ctrl, or
+    // 3. Left click on empty area (not on a node)
+    if (e.button === 1 || (e.button === 0 && e.metaKey) || (e.button === 0 && !isNodeClick)) {
       e.preventDefault();
       isDragging.current = true;
       lastMousePos.current = { x: e.clientX, y: e.clientY };

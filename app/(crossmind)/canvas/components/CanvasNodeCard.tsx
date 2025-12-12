@@ -1,8 +1,6 @@
 "use client";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import {
   Calendar,
@@ -15,8 +13,8 @@ import React from "react";
 import { HealthPopover } from "./HealthPopover";
 import { NodeHealthBadge } from "./NodeHealthBadge";
 import { DropIndicator } from "./DropIndicator";
+import { NodeContextMenu } from "./NodeContextMenu";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
-import { GripVertical } from "lucide-react";
 import type { CanvasNode } from "../canvas-data";
 
 // 子节点卡片组件（支持拖放）
@@ -25,6 +23,9 @@ function ChildNodeCard({
   childConfig,
   grandChildren,
   onNodeClick,
+  onOpenAIChat,
+  onAddChild,
+  onDelete,
   overNodeId,
   dropPosition,
 }: {
@@ -32,6 +33,9 @@ function ChildNodeCard({
   childConfig: NodeTypeConfig;
   grandChildren: CanvasNode[];
   onNodeClick: (node: CanvasNode, e: React.MouseEvent) => void;
+  onOpenAIChat: (node: CanvasNode) => void;
+  onAddChild: (node: CanvasNode) => void;
+  onDelete: (node: CanvasNode) => void;
   overNodeId: string | null;
   dropPosition: "top" | "bottom" | "center" | null;
 }) {
@@ -61,30 +65,37 @@ function ChildNodeCard({
       <DropIndicator position="top" isActive={isChildDragOver && dropPosition === "top"} />
       <DropIndicator position="bottom" isActive={isChildDragOver && dropPosition === "bottom"} />
 
-      <div
-        ref={setRefs}
-        data-node-id={child.id}
-        {...listeners}
-        {...attributes}
-        className={cn(
-          "flex items-center gap-2 py-1 px-2 -ml-4 pl-6 rounded-lg cursor-grab active:cursor-grabbing group/child transition-all",
-          isDragging && "opacity-50 scale-95 cursor-grabbing",
-          isChildDragOver && dropPosition === "center" && "ring-2 ring-primary ring-offset-1 bg-primary/5",
-          !isDragging && !isChildDragOver && "hover:bg-muted/50"
-        )}
-        onClick={(e) => {
-          e.stopPropagation();
-          onNodeClick(child, e);
-        }}
+      <NodeContextMenu
+        node={child}
+        onOpenAIChat={onOpenAIChat}
+        onAddChild={onAddChild}
+        onDelete={onDelete}
       >
-        <div className={cn("h-1.5 w-1.5 rounded-full shrink-0", childConfig.color)} />
-        <span className="text-xs font-medium flex-1 truncate">{child.title}</span>
-        {grandChildren.length > 0 && (
-          <span className="text-[10px] text-muted-foreground shrink-0">
-            +{grandChildren.length}
-          </span>
-        )}
-      </div>
+        <div
+          ref={setRefs}
+          data-node-id={child.id}
+          {...listeners}
+          {...attributes}
+          className={cn(
+            "flex items-center gap-2 py-1 px-2 -ml-4 pl-6 rounded-lg cursor-grab active:cursor-grabbing group/child transition-all",
+            isDragging && "opacity-50 scale-95 cursor-grabbing",
+            isChildDragOver && dropPosition === "center" && "ring-2 ring-primary ring-offset-1 bg-primary/5",
+            !isDragging && !isChildDragOver && "hover:bg-muted/50"
+          )}
+          onClick={(e) => {
+            e.stopPropagation();
+            onNodeClick(child, e);
+          }}
+        >
+          <div className={cn("h-1.5 w-1.5 rounded-full shrink-0", childConfig.color)} />
+          <span className="text-xs font-medium flex-1 truncate">{child.title}</span>
+          {grandChildren.length > 0 && (
+            <span className="text-[10px] text-muted-foreground shrink-0">
+              +{grandChildren.length}
+            </span>
+          )}
+        </div>
+      </NodeContextMenu>
     </div>
   );
 }
@@ -104,6 +115,7 @@ interface CanvasNodeCardProps {
   onNodeClick: (node: CanvasNode, e: React.MouseEvent) => void;
   onOpenAIChat: (node: CanvasNode) => void;
   onAddChild: (node: CanvasNode) => void;
+  onDelete: (node: CanvasNode) => void;
   onNodeRefSet: (id: string, el: HTMLDivElement | null) => void;
   matchesFilter: (node: CanvasNode) => boolean;
   stageFilter: string;
@@ -120,6 +132,7 @@ export function CanvasNodeCard({
   onNodeClick,
   onOpenAIChat,
   onAddChild,
+  onDelete,
   onNodeRefSet,
   matchesFilter,
   stageFilter,
@@ -181,6 +194,9 @@ export function CanvasNodeCard({
                 childConfig={childConfig}
                 grandChildren={grandChildren}
                 onNodeClick={onNodeClick}
+                onOpenAIChat={onOpenAIChat}
+                onAddChild={onAddChild}
+                onDelete={onDelete}
                 overNodeId={overNodeId}
                 dropPosition={dropPosition}
               />
@@ -196,32 +212,38 @@ export function CanvasNodeCard({
 
   return (
     <HealthPopover node={node}>
-      <div
-        ref={setCardRef}
-        data-node-id={node.id}
-        {...listeners}
-        {...attributes}
-        className={cn(
-          "absolute w-80 p-4 bg-background border-2 rounded-xl shadow-sm group select-none cursor-grab active:cursor-grabbing",
-          "transition-all duration-300 ease-out",
-          selectedNodeId === node.id
-            ? "border-primary shadow-lg scale-105 z-10"
-            : isHighlighted
-              ? "border-border hover:border-primary/50 hover:shadow-md"
-              : "border-border/30 opacity-40 hover:opacity-60",
-          isDragging && "opacity-50 scale-95 cursor-grabbing",
-          // Enhanced visual feedback for drop positions
-          isDragOver && dropPosition === "center" && "ring-4 ring-primary ring-offset-2 bg-primary/5",
-          isDragOver && dropPosition === "top" && "border-t-4 border-t-primary",
-          isDragOver && dropPosition === "bottom" && "border-b-4 border-b-primary"
-        )}
-        style={{
-          left: node.position.x,
-          top: node.position.y,
-          userSelect: "none",
-        }}
-        onClick={(e) => onNodeClick(node, e)}
+      <NodeContextMenu
+        node={node}
+        onOpenAIChat={onOpenAIChat}
+        onAddChild={onAddChild}
+        onDelete={onDelete}
       >
+        <div
+          ref={setCardRef}
+          data-node-id={node.id}
+          {...listeners}
+          {...attributes}
+          className={cn(
+            "absolute w-80 p-4 bg-background border-2 rounded-xl shadow-sm group select-none cursor-grab active:cursor-grabbing",
+            "transition-all duration-300 ease-out",
+            selectedNodeId === node.id
+              ? "border-primary shadow-lg scale-105 z-10"
+              : isHighlighted
+                ? "border-border hover:border-primary/50 hover:shadow-md"
+                : "border-border/30 opacity-40 hover:opacity-60",
+            isDragging && "opacity-50 scale-95 cursor-grabbing",
+            // Enhanced visual feedback for drop positions
+            isDragOver && dropPosition === "center" && "ring-4 ring-primary ring-offset-2 bg-primary/5",
+            isDragOver && dropPosition === "top" && "border-t-4 border-t-primary",
+            isDragOver && dropPosition === "bottom" && "border-b-4 border-b-primary"
+          )}
+          style={{
+            left: node.position.x,
+            top: node.position.y,
+            userSelect: "none",
+          }}
+          onClick={(e) => onNodeClick(node, e)}
+        >
         {/* Drop indicators for parent nodes */}
         <DropIndicator position="top" isActive={isDragOver === true && dropPosition === "top"} />
         <DropIndicator position="bottom" isActive={isDragOver === true && dropPosition === "bottom"} />
@@ -358,38 +380,8 @@ export function CanvasNodeCard({
           </div>
         )}
 
-        {/* Hover Actions - hide when dragging */}
-        {!isDragging && (
-          <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity">
-            <div className="flex gap-1 bg-background border border-border rounded-lg shadow-lg p-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 text-xs"
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenAIChat(node);
-              }}
-            >
-              <Sparkles className="h-3 w-3 mr-1" />
-              CrossMind
-            </Button>
-            <Separator orientation="vertical" className="h-6" />
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 text-xs"
-              onClick={(e) => {
-                e.stopPropagation();
-                onAddChild(node);
-              }}
-            >
-              Add Child
-            </Button>
-          </div>
         </div>
-        )}
-      </div>
+      </NodeContextMenu>
     </HealthPopover>
   );
 }
