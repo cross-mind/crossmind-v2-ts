@@ -387,10 +387,19 @@ export default function CanvasPage() {
           setLayoutCalculated(false);
           setNodes([]); // Clear nodes to trigger fresh layout calculation
         } else if (nodesRemoved) {
-          // Nodes removed - trigger recalculation only for affected zones
-          console.log('[Layout] Nodes removed, recalculating layout for affected zones');
-          setLayoutCalculated(false);
-          setNodes([]); // Clear to trigger fresh layout calculation
+          // Nodes removed - preserve positions, just filter out deleted nodes
+          console.log('[Layout] Nodes removed, filtering out deleted nodes while preserving positions');
+          setNodes(prevNodes => {
+            const remaining = prevNodes.filter(prevNode => newNodeIds.has(prevNode.id));
+            // Update content while keeping positions
+            return remaining.map(prevNode => {
+              const updatedContent = nodeContents.find(nc => nc.id === prevNode.id);
+              return updatedContent
+                ? { ...updatedContent, position: prevNode.position }
+                : prevNode;
+            });
+          });
+          // Don't trigger recalculation - positions stay as-is
         } else if (nodes.length === 0) {
           // Initial load
           console.log('[Layout] Initial load, triggering layout calculation');
