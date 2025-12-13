@@ -313,19 +313,16 @@ export function CanvasNodeCard({
 
           <div className="flex-1 min-w-0 pr-20">
             <h3 className="font-medium text-sm leading-snug mb-1">{node.title}</h3>
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <Badge variant="secondary" className="text-[10px] font-normal">
-                {config.emoji} {config.label}
-              </Badge>
-              {node.children && node.children.length > 0 && (
+            {node.children && node.children.length > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap">
                 <Badge
                   variant="outline"
                   className="text-[10px] font-normal bg-primary/5 text-primary border-primary/20"
                 >
                   {node.children.length} children
                 </Badge>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -362,28 +359,16 @@ export function CanvasNodeCard({
           </div>
         )}
 
-        {node.type === "idea" && (
-          <div className="mb-3 p-2 bg-yellow-500/5 border border-yellow-500/20 rounded-lg">
-            <p className="text-xs text-yellow-700 dark:text-yellow-500">
-              💡 早期想法,待验证
-            </p>
-          </div>
-        )}
-
-        {node.type === "inspiration" && (
-          <div className="mb-3 p-2 bg-pink-500/5 border border-pink-500/20 rounded-lg">
-            <div className="flex items-center gap-1.5 text-xs text-pink-600 dark:text-pink-400 mb-1">
-              <Sparkles className="h-3 w-3" />
-              <span className="font-medium">Inspiration</span>
-            </div>
+        {node.type === "inspiration" && (node.source || node.capturedAt) && (
+          <div className="mb-3 space-y-1">
             {node.source && (
-              <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
                 <span>📚 {node.source}</span>
               </div>
             )}
             {node.capturedAt && (
-              <div className="flex items-center gap-1 text-[10px] text-muted-foreground mt-0.5">
-                <Clock className="h-2.5 w-2.5" />
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Clock className="h-3 w-3" />
                 {node.capturedAt instanceof Date ? node.capturedAt.toLocaleDateString() : node.capturedAt}
               </div>
             )}

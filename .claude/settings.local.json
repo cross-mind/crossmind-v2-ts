@@ -7,17 +7,16 @@
       "Bash(lsof:*)",
       "Bash(kill:*)",
       "Bash(pnpm dev:*)",
-      "Bash(git worktree add:*)",
-      "Bash(timeout 5 pnpm dev:*)",
+      "Bash(timeout:*)",
       "Bash(pnpm install:*)",
       "Bash(ps:*)",
-      "Bash(timeout 10 pnpm dev:*)",
-      "Bash(timeout 3 pnpm logs:*)",
       "Bash(curl:*)",
       "Bash(pnpm stop:*)",
       "Bash(pnpm clean:logs:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(git worktree:*)",
+      "Bash(git branch:*)"
     ],
     "deny": [],
     "ask": []

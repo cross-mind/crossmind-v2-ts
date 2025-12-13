@@ -680,7 +680,7 @@ export default function CanvasPage() {
       const result = await response.json();
 
       // Refresh data first for all types
-      const [updatedNodes] = await Promise.all([
+      await Promise.all([
         mutate(),
         mutateSuggestions(),
       ]);
@@ -689,37 +689,31 @@ export default function CanvasPage() {
       if (result.type === "content-suggestion" && result.result?.changes) {
         const { nodeId, prefilledPrompt } = result.result.changes;
 
-        // Find and select the target node from refreshed data
-        const targetNode = (updatedNodes || nodeContents).find((n: { id: string }) => n.id === nodeId);
-        if (targetNode) {
-          const fullNode = nodes.find(n => n.id === nodeId);
-          if (fullNode) {
-            setSelectedNode(fullNode);
-            setShowAIChat(true);
-            setPendingAIChatPrompt({
-              nodeId,
-              prompt: prefilledPrompt,
-            });
-            updateUrl(nodeId, "ai-chat");
-          }
+        // Find the target node after refresh
+        const fullNode = nodes.find(n => n.id === nodeId);
+        if (fullNode) {
+          setSelectedNode(fullNode);
+          setShowAIChat(true);
+          setPendingAIChatPrompt({
+            nodeId,
+            prompt: prefilledPrompt,
+          });
+          updateUrl(nodeId, "ai-chat");
         }
       } else {
         // For other types (add-tag, add-node, etc.)
         // If the current selected node was affected, refresh its data
         if (selectedNode && result.result?.affectedNodeId === selectedNode.id) {
-          const updatedNode = (updatedNodes || nodeContents).find((n: { id: string }) => n.id === selectedNode.id);
-          if (updatedNode) {
-            const fullNode = nodes.find(n => n.id === selectedNode.id);
-            if (fullNode) {
-              setSelectedNode(fullNode);
-            }
+          const fullNode = nodes.find(n => n.id === selectedNode.id);
+          if (fullNode) {
+            setSelectedNode(fullNode);
           }
         }
       }
     } catch (error) {
       console.error("[Canvas] Failed to apply suggestion:", error);
     }
-  }, [nodes, nodeContents, selectedNode, mutate, mutateSuggestions, updateUrl]);
+  }, [nodes, selectedNode, mutate, mutateSuggestions, updateUrl]);
 
   const handleDismissSuggestion = useCallback(async (suggestionId: string) => {
     try {
