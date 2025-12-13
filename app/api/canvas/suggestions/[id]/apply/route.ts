@@ -7,6 +7,8 @@ import {
 import { executeSuggestion } from "@/lib/db/suggestion-actions";
 import { ChatSDKError } from "@/lib/errors";
 
+export const dynamic = "force-dynamic";
+
 /**
  * POST /api/canvas/suggestions/[id]/apply
  *
@@ -28,7 +30,7 @@ export async function POST(
     // Auth check
     const session = await auth();
     if (!session?.user?.id) {
-      return new ChatSDKError("unauthorized").toResponse();
+      return new ChatSDKError("unauthorized:suggestions").toResponse();
     }
 
     const { id } = await params;
@@ -36,13 +38,13 @@ export async function POST(
     // Get suggestion
     const suggestion = await getCanvasSuggestionById({ id });
     if (!suggestion) {
-      return new ChatSDKError("not_found", "Suggestion not found").toResponse();
+      return new ChatSDKError("not_found:suggestions", "Suggestion not found").toResponse();
     }
 
     // Check if already applied or dismissed
     if (suggestion.status !== "pending") {
       return new ChatSDKError(
-        "invalid:suggestion-status",
+        "bad_request:suggestions",
         `Suggestion is already ${suggestion.status}`
       ).toResponse();
     }
@@ -52,7 +54,7 @@ export async function POST(
 
     if (!result.success) {
       return new ChatSDKError(
-        "bad_request:execution",
+        "bad_request:suggestions",
         result.error || "Failed to execute suggestion"
       ).toResponse();
     }

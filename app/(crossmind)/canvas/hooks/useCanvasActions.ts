@@ -14,9 +14,10 @@ interface UseCanvasActionsProps {
   projectId: string | null;
   nodes: CanvasNode[];
   currentFrameworkId?: string | null;
+  onNodeCreated?: (nodeId: string) => void;
 }
 
-export function useCanvasActions({ projectId, nodes, currentFrameworkId }: UseCanvasActionsProps) {
+export function useCanvasActions({ projectId, nodes, currentFrameworkId, onNodeCreated }: UseCanvasActionsProps) {
   // Node Dialog state
   const [nodeDialogOpen, setNodeDialogOpen] = useState(false);
   const [nodeDialogParentId, setNodeDialogParentId] = useState<string | null>(null);
@@ -52,19 +53,25 @@ export function useCanvasActions({ projectId, nodes, currentFrameworkId }: UseCa
       if (!projectId) return;
 
       try {
-        await createNodeAction({
+        const newNode = await createNodeAction({
           projectId,
           parentId: nodeDialogParentId || undefined,
           ...data,
         });
-        // Revalidate SWR cache
-        mutate(`/api/canvas?projectId=${projectId}`);
+
+        // Revalidate SWR cache and wait for it to complete
+        await mutate(`/api/canvas?projectId=${projectId}`);
+
+        // Call onNodeCreated callback to select the new node
+        if (newNode && onNodeCreated) {
+          onNodeCreated(newNode.id);
+        }
       } catch (error) {
         console.error("Failed to create node:", error);
         throw error;
       }
     },
-    [projectId, nodeDialogParentId]
+    [projectId, nodeDialogParentId, onNodeCreated]
   );
 
   /**
@@ -86,7 +93,7 @@ export function useCanvasActions({ projectId, nodes, currentFrameworkId }: UseCa
       if (!node) return;
 
       try {
-        const updatedTags = [...node.tags, tag];
+        const updatedTags = [...(node.tags || []), tag];
         await updateNodeAction({
           id: tagDialogNodeId,
           tags: updatedTags,
@@ -138,7 +145,7 @@ export function useCanvasActions({ projectId, nodes, currentFrameworkId }: UseCa
           ? { [currentFrameworkId]: { [quickNodeZone.zoneKey]: 1.0 } }
           : undefined;
 
-        await createNodeAction({
+        const newNode = await createNodeAction({
           projectId,
           title: data.title,
           content: "",
@@ -147,20 +154,25 @@ export function useCanvasActions({ projectId, nodes, currentFrameworkId }: UseCa
           displayOrder,
         });
 
-        // Revalidate SWR cache for both canvas nodes and affinities
-        mutate(`/api/canvas?projectId=${projectId}`);
+        // Revalidate SWR cache for both canvas nodes and affinities, wait for completion
+        await mutate(`/api/canvas?projectId=${projectId}`);
         if (currentFrameworkId) {
-          mutate(`/api/canvas/affinities?projectId=${projectId}&frameworkId=${currentFrameworkId}`);
+          await mutate(`/api/canvas/affinities?projectId=${projectId}&frameworkId=${currentFrameworkId}`);
         }
 
         // Reset state
         setQuickNodeZone(null);
+
+        // Call onNodeCreated callback to select the new node
+        if (newNode && onNodeCreated) {
+          onNodeCreated(newNode.id);
+        }
       } catch (error) {
         console.error("Failed to create quick node:", error);
         throw error;
       }
     },
-    [projectId, quickNodeZone, currentFrameworkId]
+    [projectId, quickNodeZone, currentFrameworkId, onNodeCreated]
   );
 
   return {

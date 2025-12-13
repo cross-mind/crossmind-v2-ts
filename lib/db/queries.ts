@@ -8,6 +8,7 @@ import type { VisibilityType } from "@/components/visibility-selector";
 import { ChatSDKError } from "../errors";
 import type { AppUsage } from "../usage";
 import { generateUUID } from "../utils";
+import type { ZoneAffinities } from "../types";
 import {
   type Chat,
   chat,
@@ -514,6 +515,7 @@ export async function getCanvasNodesByProjectId({ projectId }: { projectId: stri
         references: canvasNode.references,
         positions: canvasNode.positions,
         zoneAffinities: canvasNode.zoneAffinities,
+        hiddenInFrameworks: canvasNode.hiddenInFrameworks,  // Framework-specific visibility
         tags: canvasNode.tags,
         displayOrder: canvasNode.displayOrder,  // Added for drag-drop sorting
         healthScore: canvasNode.healthScore,
@@ -569,7 +571,7 @@ export async function createCanvasNode({
   parentId?: string;
   tags?: string[];
   positions?: Record<string, { x: number; y: number }>;
-  zoneAffinities?: Record<string, Record<string, number>>;
+  zoneAffinities?: ZoneAffinities;
   displayOrder?: number;
   taskStatus?: "todo" | "in-progress" | "done";
   assigneeId?: string;
@@ -686,7 +688,7 @@ export async function updateCanvasNode({
   tags?: string[];
   displayOrder?: number;
   parentId?: string | null;
-  zoneAffinities?: Record<string, Record<string, number>>;
+  zoneAffinities?: ZoneAffinities;
   hiddenInFrameworks?: Record<string, boolean>;
   taskStatus?: "todo" | "in-progress" | "done";
   assigneeId?: string;
@@ -1307,7 +1309,7 @@ export async function getFrameworksForUser(userId?: string): Promise<Framework[]
 
     if (userId) {
       // User-specific: platform frameworks OR user-owned frameworks
-      conditions.push(or(isNull(framework.ownerId), eq(framework.ownerId, userId)));
+      conditions.push(or(isNull(framework.ownerId), eq(framework.ownerId, userId))!);
     } else {
       // No user: only platform frameworks
       conditions.push(isNull(framework.ownerId));
@@ -1484,7 +1486,7 @@ export async function updateNodeAffinities(
               updatedAt: new Date(),
             };
           })
-          .filter(Boolean); // Remove nulls
+          .filter((v): v is NonNullable<typeof v> => v !== null); // Remove nulls
 
         if (values.length > 0) {
           await tx.insert(canvasNodeZoneAffinity).values(values);

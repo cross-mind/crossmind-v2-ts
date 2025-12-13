@@ -4,6 +4,7 @@
  */
 
 import type { CanvasNode as DBCanvasNode } from "@/lib/db/schema";
+import type { ZoneAffinities } from "@/lib/types";
 import type { NodeContent } from "./canvas-types";
 
 /**
@@ -29,7 +30,7 @@ export function dbNodeToNodeContent(dbNode: DBCanvasNode): NodeContent {
     health: dbNode.healthScore ? Number.parseInt(dbNode.healthScore) : undefined,
     references: dbNode.references || [],
     children: dbNode.children || [],
-    zoneAffinities: dbNode.zoneAffinities as Record<string, Record<string, number>> | undefined,
+    zoneAffinities: dbNode.zoneAffinities as ZoneAffinities | undefined,
   };
 }
 
@@ -51,6 +52,15 @@ export function getNodeTypeEmoji(type: NodeContent["type"]): string {
     inspiration: "✨",
   };
   return emojiMap[type];
+}
+
+/**
+ * Normalize health score from various types to number
+ */
+export function normalizeHealthScore(score: number | string | null | undefined): number {
+  if (typeof score === 'number') return score;
+  if (typeof score === 'string') return Number(score) || 0;
+  return 0;
 }
 
 /**
@@ -82,7 +92,7 @@ export function getHealthBadgeVariant(health: number | undefined): "default" | "
  * @returns Next displayOrder value (incremented by 1000 for spacing)
  */
 export function calculateNextDisplayOrderInZone(
-  nodes: { id: string; displayOrder?: number; zoneAffinities?: Record<string, Record<string, number>> }[],
+  nodes: { id: string; displayOrder?: number | null; zoneAffinities?: ZoneAffinities | null }[],
   frameworkId: string | null,
   zoneKey: string | null
 ): number {

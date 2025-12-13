@@ -11,6 +11,7 @@ import { CanvasBackgroundContextMenu } from "./CanvasBackgroundContextMenu";
 import type { CanvasNode, ThinkingFramework } from "../canvas-data";
 import type { NODE_TYPE_CONFIG } from "../node-type-config";
 import type { DropPosition } from "../lib/drag-drop-helpers";
+import type { CanvasSuggestion } from "@/lib/db/schema";
 
 interface CanvasAreaProps {
   canvasRef: React.RefObject<HTMLDivElement>;
@@ -24,6 +25,7 @@ interface CanvasAreaProps {
   currentFramework: ThinkingFramework | null;
   zoneBounds: Record<string, { width: number; height: number }>;
   getDynamicZoneConfigs: () => Record<string, { startX: number; startY: number; columnCount: number; nodeIds: string[] }>;
+  allNodes: CanvasNode[];
   visibleNodes: CanvasNode[];
   selectedNode: CanvasNode | null;
   nodeTypeConfig: typeof NODE_TYPE_CONFIG;
@@ -53,6 +55,10 @@ interface CanvasAreaProps {
   activeNodeId?: string | null;
   overNodeId?: string | null;
   dropPosition?: DropPosition;
+  // Suggestions
+  suggestionsByNode: Map<string, CanvasSuggestion[]>;
+  onApplySuggestion: (suggestionId: string) => void;
+  onDismissSuggestion: (suggestionId: string) => void;
 }
 
 export function CanvasArea({
@@ -67,6 +73,7 @@ export function CanvasArea({
   currentFramework,
   zoneBounds,
   getDynamicZoneConfigs,
+  allNodes,
   visibleNodes,
   selectedNode,
   nodeTypeConfig,
@@ -95,6 +102,9 @@ export function CanvasArea({
   activeNodeId,
   overNodeId,
   dropPosition,
+  suggestionsByNode,
+  onApplySuggestion,
+  onDismissSuggestion,
 }: CanvasAreaProps) {
   // Setup event listeners in this component where refs are actually attached
   useLayoutEffect(() => {
@@ -206,6 +216,9 @@ export function CanvasArea({
               }}
               matchesFilter={matchesFilter}
               stageFilter={stageFilter}
+              nodeSuggestions={suggestionsByNode.get(node.id) || []}
+              onApplySuggestion={onApplySuggestion}
+              onDismissSuggestion={onDismissSuggestion}
               overNodeId={overNodeId}
               dropPosition={dropPosition}
             />
@@ -233,13 +246,13 @@ export function CanvasArea({
 
         {/* Tag Filter */}
         <div className="bg-background/90 backdrop-blur border border-border rounded-lg shadow-lg">
-          <TagFilter nodes={visibleNodes} selectedTags={selectedTags} onTagsChange={onTagsChange} />
+          <TagFilter nodes={allNodes} selectedTags={selectedTags} onTagsChange={onTagsChange} />
         </div>
 
         {/* Hidden Nodes Dropdown */}
         <div className="bg-background/90 backdrop-blur border border-border rounded-lg shadow-lg">
           <HiddenNodesDropdown
-            nodes={visibleNodes}
+            nodes={allNodes}
             currentFrameworkId={currentFramework?.id || null}
             onRestoreNode={onRestoreNode}
           />

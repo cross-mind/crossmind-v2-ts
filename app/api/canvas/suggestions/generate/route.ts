@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/app/(auth)/auth";
 import { generateText } from "ai";
-import { customProvider } from "@/lib/ai/providers";
+import { myProvider } from "@/lib/ai/providers";
 import {
   getCanvasNodesByProjectId,
   createCanvasSuggestion,
@@ -12,9 +12,16 @@ import {
   validateSuggestionResponse,
 } from "@/lib/ai/prompts/suggestion-prompts";
 import { ChatSDKError } from "@/lib/errors";
-import { db } from "@/lib/db/drizzle";
 import { framework, frameworkZone } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
+
+export const dynamic = "force-dynamic";
+
+// biome-ignore lint: Forbidden non-null assertion.
+const client = postgres(process.env.POSTGRES_URL!);
+const db = drizzle(client);
 
 /**
  * POST /api/canvas/suggestions/generate
@@ -43,7 +50,7 @@ export async function POST(request: Request) {
     // Auth check
     const session = await auth();
     if (!session?.user?.id) {
-      return new ChatSDKError("unauthorized").toResponse();
+      return new ChatSDKError("unauthorized:suggestions").toResponse();
     }
 
     // Parse request body
@@ -52,7 +59,7 @@ export async function POST(request: Request) {
 
     if (!projectId || !frameworkId) {
       return new ChatSDKError(
-        "invalid:params",
+        "bad_request:suggestions",
         "projectId and frameworkId are required"
       ).toResponse();
     }
@@ -64,7 +71,7 @@ export async function POST(request: Request) {
       .where(eq(framework.id, frameworkId));
 
     if (!frameworkData) {
-      return new ChatSDKError("not_found", "Framework not found").toResponse();
+      return new ChatSDKError("not_found:suggestions", "Framework not found").toResponse();
     }
 
     // Get framework zones
@@ -94,7 +101,7 @@ export async function POST(request: Request) {
 
     if (targetNodes.length === 0) {
       return new ChatSDKError(
-        "not_found",
+        "not_found:suggestions",
         "No nodes found for suggestion generation"
       ).toResponse();
     }
@@ -109,8 +116,7 @@ export async function POST(request: Request) {
         content: node.content,
         type: node.type || "document",
         tags: node.tags || [],
-        zone: node.zone,
-        healthScore: node.healthScore || undefined,
+        healthScore: node.healthScore ? (typeof node.healthScore === 'number' ? node.healthScore : Number(node.healthScore)) : undefined,
         healthLevel: node.healthLevel || undefined,
       }))
     );
@@ -122,11 +128,10 @@ export async function POST(request: Request) {
 
     // Call AI to generate suggestions
     const { text } = await generateText({
-      model: customProvider.languageModel("chat-model"),
+      model: myProvider.languageModel("chat-model"),
       system: systemPrompt,
       prompt: userMessage,
       temperature: 0.7,
-      maxTokens: 4000,
     });
 
     console.log("[Generate Suggestions] AI response length:", text.length);
@@ -139,7 +144,7 @@ export async function POST(request: Request) {
       console.error("[Generate Suggestions] JSON parse error:", parseError);
       console.error("[Generate Suggestions] Raw text:", text);
       return new ChatSDKError(
-        "bad_request:ai-response",
+        "bad_request:suggestions",
         "Failed to parse AI response as JSON"
       ).toResponse();
     }
@@ -151,7 +156,7 @@ export async function POST(request: Request) {
         suggestionsData
       );
       return new ChatSDKError(
-        "bad_request:ai-response",
+        "bad_request:suggestions",
         "AI response does not match expected format"
       ).toResponse();
     }

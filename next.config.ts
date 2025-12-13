@@ -1,7 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  cacheComponents: true,
+  // Note: cacheComponents is not compatible with route segment config (export const dynamic)
+  // Disabled to allow dynamic route configuration for auth-protected API routes
+  // cacheComponents: true,
+
   images: {
     remotePatterns: [
       {
@@ -14,6 +17,8 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+
+  transpilePackages: ["shiki"],
 };
 
 export default nextConfig;

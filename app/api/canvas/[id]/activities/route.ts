@@ -3,6 +3,8 @@ import { auth } from "@/app/(auth)/auth";
 import { ChatSDKError } from "@/lib/errors";
 import { getCanvasActivities, getCanvasNodeById } from "@/lib/db/queries";
 
+export const dynamic = "force-dynamic";
+
 // GET /api/canvas/[id]/activities
 export async function GET(
   request: Request,

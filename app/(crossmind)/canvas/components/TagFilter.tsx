@@ -22,7 +22,7 @@ export function TagFilter({ nodes, selectedTags, onTagsChange }: TagFilterProps)
   const allTags = useMemo(() => {
     const tagSet = new Set<string>();
     nodes.forEach((node) => {
-      node.tags.forEach((tag) => tagSet.add(tag));
+      node.tags?.forEach((tag) => tagSet.add(tag));
     });
     return Array.from(tagSet).sort();
   }, [nodes]);

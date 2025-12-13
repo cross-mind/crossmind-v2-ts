@@ -87,7 +87,7 @@ export function updateZoneAffinities(
   return {
     ...(node.zoneAffinities || {}),
     [frameworkId]: {
-      ...(node.zoneAffinities?.[frameworkId] || {}),
+      ...((node.zoneAffinities as Record<string, Record<string, number>> | undefined)?.[frameworkId] || {}),
       [newZoneId]: 10, // 最高权重，确保节点留在新区域
     },
   };

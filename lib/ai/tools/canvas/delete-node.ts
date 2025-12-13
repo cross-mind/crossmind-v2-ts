@@ -44,14 +44,14 @@ export const deleteNode = ({ session, dataStream, context }: DeleteNodeProps) =>
 
         // Notify frontend via data stream
         dataStream.write({
-          type: "node-deleted" as any,
+          type: "node-deleted",
           data: {
             nodeId,
             title: node.title,
             reason,
           },
           transient: true,
-        });
+        } as any);
 
         // Warn if deleted the current node
         const isCurrentNode = nodeId === context.nodeId;

@@ -4,6 +4,8 @@ import { auth } from "@/app/(auth)/auth";
 import { ChatSDKError } from "@/lib/errors";
 import { createCanvasNode, getCanvasNodesByProjectId } from "@/lib/db/queries";
 
+export const dynamic = "force-dynamic";
+
 // GET /api/canvas?projectId=xxx
 export async function GET(request: Request) {
   const session = await auth();

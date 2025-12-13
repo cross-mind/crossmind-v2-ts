@@ -15,7 +15,10 @@ import { NodeHealthBadge } from "./NodeHealthBadge";
 import { DropIndicator } from "./DropIndicator";
 import { NodeContextMenu } from "./NodeContextMenu";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
+import { NodeSuggestionBadge } from "./NodeSuggestionBadge";
+import { SuggestionPopover } from "./SuggestionPopover";
 import type { CanvasNode, ThinkingFramework } from "../canvas-data";
+import type { CanvasSuggestion } from "@/lib/db/schema";
 
 // 子节点卡片组件（支持拖放）
 function ChildNodeCard({
@@ -135,6 +138,10 @@ interface CanvasNodeCardProps {
   // Drag-drop props
   overNodeId?: string | null;
   dropPosition?: "top" | "bottom" | "center" | null;
+  // Suggestions
+  nodeSuggestions: CanvasSuggestion[];
+  onApplySuggestion: (suggestionId: string) => void;
+  onDismissSuggestion: (suggestionId: string) => void;
 }
 
 export function CanvasNodeCard({
@@ -154,6 +161,9 @@ export function CanvasNodeCard({
   stageFilter,
   overNodeId,
   dropPosition,
+  nodeSuggestions,
+  onApplySuggestion,
+  onDismissSuggestion,
 }: CanvasNodeCardProps) {
   const config = nodeTypeConfig[node.type];
   const Icon = config.icon;
@@ -261,8 +271,8 @@ export function CanvasNodeCard({
             isDragOver && dropPosition === "bottom" && "border-b-4 border-b-primary"
           )}
           style={{
-            left: node.position.x,
-            top: node.position.y,
+            left: node.position?.x ?? -9999,
+            top: node.position?.y ?? -9999,
             userSelect: "none",
           }}
           onClick={(e) => onNodeClick(node, e)}
@@ -272,6 +282,19 @@ export function CanvasNodeCard({
         <DropIndicator position="bottom" isActive={isDragOver === true && dropPosition === "bottom"} />
         {/* Health Badge */}
         <NodeHealthBadge node={node} />
+
+        {/* Suggestion Badge with Popover */}
+        {nodeSuggestions.length > 0 && (
+          <SuggestionPopover
+            suggestions={nodeSuggestions}
+            onApply={onApplySuggestion}
+            onDismiss={onDismissSuggestion}
+          >
+            <div className="absolute top-2 right-14">
+              <NodeSuggestionBadge count={nodeSuggestions.length} />
+            </div>
+          </SuggestionPopover>
+        )}
 
         {/* Header */}
         <div className="flex items-start gap-2 mb-3">
@@ -329,7 +352,7 @@ export function CanvasNodeCard({
             {node.dueDate && (
               <div className="flex items-center gap-1 text-xs text-muted-foreground">
                 <Calendar className="h-3 w-3" />
-                截止 {node.dueDate}
+                截止 {node.dueDate instanceof Date ? node.dueDate.toLocaleDateString() : node.dueDate}
               </div>
             )}
           </div>
@@ -357,7 +380,7 @@ export function CanvasNodeCard({
             {node.capturedAt && (
               <div className="flex items-center gap-1 text-[10px] text-muted-foreground mt-0.5">
                 <Clock className="h-2.5 w-2.5" />
-                {node.capturedAt}
+                {node.capturedAt instanceof Date ? node.capturedAt.toLocaleDateString() : node.capturedAt}
               </div>
             )}
           </div>
@@ -372,7 +395,7 @@ export function CanvasNodeCard({
         {renderChildren(node.id)}
 
         {/* Tags */}
-        {node.tags.length > 0 && (
+        {node.tags && node.tags.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mt-4">
             {node.tags.slice(0, 3).map((tag) => {
               const [namespace, value] = tag.split("/");

@@ -106,8 +106,8 @@ export async function executeAddNode(
       content: newNodeData.content || "",
       type: (newNodeData.type as any) || "document",
       tags: newNodeData.tags || [],
-      parentId: suggestion.nodeId || null, // Link to source node if available
-      authorId: userId,
+      parentId: suggestion.nodeId || undefined, // Link to source node if available
+      createdById: userId,
     });
 
     // Create activity on source node if it exists

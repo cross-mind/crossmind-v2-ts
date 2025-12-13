@@ -1,6 +1,8 @@
 import { auth } from "@/app/(auth)/auth";
 import { getFrameworkWithZones } from "@/lib/db/queries";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> }

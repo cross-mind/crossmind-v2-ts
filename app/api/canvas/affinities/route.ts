@@ -1,6 +1,8 @@
 import { auth } from "@/app/(auth)/auth";
 import { getNodeAffinitiesForFramework } from "@/lib/db/queries";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: Request) {
   const session = await auth();
   if (!session?.user?.id) {

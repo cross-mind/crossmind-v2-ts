@@ -17,6 +17,7 @@ import {
   varchar,
 } from "drizzle-orm/pg-core";
 import type { AppUsage } from "../usage";
+import type { ZoneAffinities } from "../types";
 
 export const user = pgTable("User", {
   id: uuid("id").primaryKey().notNull().defaultRandom(),
@@ -250,7 +251,7 @@ export const canvasNode = pgTable(
     positions: jsonb("positions"),
 
     // Zone affinities (framework-to-zone weights for smart placement)
-    zoneAffinities: jsonb("zoneAffinities"),
+    zoneAffinities: jsonb("zoneAffinities").$type<ZoneAffinities>(),
 
     // Hidden state per framework (framework-specific visibility)
     hiddenInFrameworks: jsonb("hiddenInFrameworks").$type<Record<string, boolean>>(),

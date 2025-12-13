@@ -43,13 +43,13 @@ export const updateNode = ({ session, dataStream, context }: UpdateNodeProps) =>
 
         // Notify frontend via data stream
         dataStream.write({
-          type: "node-updated" as any,
+          type: "node-updated",
           data: {
             nodeId: targetNodeId,
             updates,
           },
           transient: true,
-        });
+        } as any);
 
         const changesList = Object.keys(updates).join(", ");
         return {

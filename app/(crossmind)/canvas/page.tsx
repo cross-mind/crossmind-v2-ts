@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { mutate as globalMutate } from "swr";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -40,7 +41,8 @@ import { CanvasArea } from "./components/CanvasArea";
 import { NODE_TYPE_CONFIG } from "./node-type-config";
 import { extractStageFromTags } from "./lib/canvas-helpers";
 import { useCanvasNodes, useCanvasComments, useCanvasActivities } from "@/hooks/use-canvas-nodes";
-import type { CanvasNode as DBCanvasNode, CanvasNodeComment, CanvasNodeActivity } from "@/lib/db/schema";
+import { useCanvasSuggestionsByFramework } from "@/hooks/use-canvas-suggestions";
+import type { CanvasNode as DBCanvasNode, CanvasNodeComment, CanvasNodeActivity, CanvasSuggestion } from "@/lib/db/schema";
 import { NodeDialog } from "./components/NodeDialog";
 import { TagDialog } from "./components/TagDialog";
 import { QuickNodeDialog } from "./components/QuickNodeDialog";
@@ -167,6 +169,7 @@ export default function CanvasPage() {
       references: dbNode.references || [],
       children: dbNode.children || [],
       displayOrder: dbNode.displayOrder, // Include displayOrder for drag-drop
+      hiddenInFrameworks: (dbNode as any).hiddenInFrameworks || {}, // Include hiddenInFrameworks for filtering
     }));
   }, [dbNodes, projectId, isLoading, isError]);
 
@@ -188,7 +191,6 @@ export default function CanvasPage() {
   const ZONE_ROW_HEIGHT = 1000;
 
   const [selectedNode, setSelectedNode] = useState<CanvasNode | null>(null);
-  const [suggestions] = useState<AISuggestion[]>(MOCK_SUGGESTIONS);
   const [stageFilter, setStageFilter] = useState<StageFilterType>("all");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
@@ -216,12 +218,35 @@ export default function CanvasPage() {
     currentFramework?.id || null
   );
 
+  // Fetch suggestions for current framework
+  const {
+    suggestions: dbSuggestions,
+    isLoading: suggestionsLoading,
+    mutate: mutateSuggestions,
+  } = useCanvasSuggestionsByFramework({
+    projectId: projectId || "",
+    frameworkId: currentFramework?.id || null,
+    status: "pending", // Only show pending suggestions
+  });
+
   // Fetch and persist node positions for current framework
   const nodeIds = useMemo(() => nodeContents.map(n => n.id), [nodeContents]);
   const { positions: persistedPositions, savePositions, saveImmediately, isLoading: positionsLoading } = useNodePositions(
     currentFramework?.id || null,
     nodeIds
   );
+
+  // Group suggestions by nodeId for efficient lookup
+  const suggestionsByNode = useMemo(() => {
+    const map = new Map<string, CanvasSuggestion[]>();
+    dbSuggestions.forEach((suggestion) => {
+      if (suggestion.nodeId) {
+        const existing = map.get(suggestion.nodeId) || [];
+        map.set(suggestion.nodeId, [...existing, suggestion]);
+      }
+    });
+    return map;
+  }, [dbSuggestions]);
 
   // Reset state when projectId changes
   useEffect(() => {
@@ -286,6 +311,9 @@ export default function CanvasPage() {
     prevFrameworkIdRef.current = currentFrameworkId;
   }, [currentFramework, saveImmediately]);
 
+  // Ref to store node creation callback (to avoid circular dependency)
+  const onNodeCreatedRef = useRef<((nodeId: string) => void) | null>(null);
+
   // Canvas actions hook (handles node creation, tags, comments)
   const {
     nodeDialogOpen,
@@ -306,7 +334,12 @@ export default function CanvasPage() {
     commentInput,
     setCommentInput,
     handleAddComment,
-  } = useCanvasActions({ projectId, nodes, currentFrameworkId: currentFramework?.id || null });
+  } = useCanvasActions({
+    projectId,
+    nodes,
+    currentFrameworkId: currentFramework?.id || null,
+    onNodeCreated: (nodeId) => onNodeCreatedRef.current?.(nodeId),
+  });
 
   // Generate dynamic zone configs based on current framework
   const getDynamicZoneConfigs = useCallback(() => {
@@ -475,6 +508,10 @@ export default function CanvasPage() {
 
   // AI Chat state
   const [showAIChat, setShowAIChat] = useState(false);
+  const [pendingAIChatPrompt, setPendingAIChatPrompt] = useState<{
+    nodeId: string;
+    prompt: string;
+  } | null>(null);
 
   // Strategic zones always enabled
   const showStrategicZones = true;
@@ -548,6 +585,35 @@ export default function CanvasPage() {
     updateUrl(null); // Clear nodeId and tab from URL
   };
 
+  // Set node creation callback
+  onNodeCreatedRef.current = (nodeId: string) => {
+    // Immediately update URL and hide AI chat
+    setShowAIChat(false);
+    updateUrl(nodeId, "document");
+
+    // Poll for the node to appear in nodeContents after SWR cache update
+    let attempts = 0;
+    const maxAttempts = 60; // Try for up to 3 seconds (60 * 50ms)
+
+    const intervalId = setInterval(() => {
+      const content = nodeContents.find((n) => n.id === nodeId);
+      attempts++;
+
+      if (content) {
+        // Create a CanvasNode from NodeContent
+        const canvasNode: CanvasNode = {
+          ...content,
+          position: { x: 0, y: 0 }, // Will be calculated by layout
+        };
+        setSelectedNode(canvasNode);
+        clearInterval(intervalId);
+      } else if (attempts >= maxAttempts) {
+        // Give up after max attempts
+        clearInterval(intervalId);
+      }
+    }, 50);
+  };
+
   // Build user lookup map (temporary solution)
   const userMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -584,6 +650,85 @@ export default function CanvasPage() {
       updateUrl(selectedNode.id, show ? "ai-chat" : "document");
     }
   }, [selectedNode, updateUrl]);
+
+  // Suggestion handlers
+  const handleApplySuggestion = useCallback(async (suggestionId: string) => {
+    try {
+      const response = await fetch(`/api/canvas/suggestions/${suggestionId}/apply`, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to apply suggestion");
+      }
+
+      const result = await response.json();
+
+      // Handle content-suggestion type - open AI Chat with pre-filled prompt
+      if (result.type === "content-suggestion" && result.result?.changes) {
+        const { nodeId, prefilledPrompt } = result.result.changes;
+
+        // Find and select the target node
+        const targetNode = nodes.find(n => n.id === nodeId);
+        if (targetNode) {
+          setSelectedNode(targetNode);
+          setShowAIChat(true);
+          setPendingAIChatPrompt({
+            nodeId,
+            prompt: prefilledPrompt,
+          });
+          updateUrl(nodeId, "ai-chat");
+        }
+      } else {
+        // For other types, refresh nodes and suggestions
+        await mutate();
+        await mutateSuggestions();
+      }
+    } catch (error) {
+      console.error("[Canvas] Failed to apply suggestion:", error);
+    }
+  }, [nodes, mutate, mutateSuggestions, updateUrl]);
+
+  const handleDismissSuggestion = useCallback(async (suggestionId: string) => {
+    try {
+      const response = await fetch(`/api/canvas/suggestions/${suggestionId}/dismiss`, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to dismiss suggestion");
+      }
+
+      // Refresh suggestions list
+      await mutateSuggestions();
+    } catch (error) {
+      console.error("[Canvas] Failed to dismiss suggestion:", error);
+    }
+  }, [mutateSuggestions]);
+
+  const handleGenerateSuggestions = useCallback(async () => {
+    if (!projectId || !currentFramework) return;
+
+    try {
+      const response = await fetch("/api/canvas/suggestions/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          projectId,
+          frameworkId: currentFramework.id,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to generate suggestions");
+      }
+
+      // Refresh suggestions list
+      await mutateSuggestions();
+    } catch (error) {
+      console.error("[Canvas] Failed to generate suggestions:", error);
+    }
+  }, [projectId, currentFramework, mutateSuggestions]);
 
   // Restore selected node from URL on initial load and sync with URL changes
   useEffect(() => {
@@ -713,9 +858,10 @@ export default function CanvasPage() {
 
       console.log("[HideNode] Successfully hidden node");
 
-      // Revalidate to update UI
+      // Revalidate to update UI by explicitly calling global mutate with the SWR key
       if (projectId) {
-        await mutate();
+        const swrKey = `/api/canvas?projectId=${projectId}`;
+        await globalMutate(swrKey);
       }
     } catch (error) {
       console.error("[HideNode] Failed to hide node:", error);
@@ -763,9 +909,10 @@ export default function CanvasPage() {
 
       console.log("[RestoreNode] Successfully restored node");
 
-      // Revalidate to update UI
+      // Revalidate to update UI by explicitly calling global mutate with the SWR key
       if (projectId) {
-        await mutate();
+        const swrKey = `/api/canvas?projectId=${projectId}`;
+        await globalMutate(swrKey);
       }
     } catch (error) {
       console.error("[RestoreNode] Failed to restore node:", error);
@@ -854,9 +1001,22 @@ export default function CanvasPage() {
     if (dbNodes && dbNodes.length > 0) {
       // Create a stable hash of node data to detect actual changes
       const dataHash = dbNodes
-        .map(n => `${n.id}-${n.displayOrder}-${n.parentId || 'null'}`)
+        .map(n => {
+          const hiddenFrameworks = (n as any).hiddenInFrameworks || {};
+          const hiddenHash = Object.keys(hiddenFrameworks).sort().map(k => `${k}:${hiddenFrameworks[k]}`).join(',');
+          return `${n.id}-${n.displayOrder}-${n.parentId || 'null'}-${hiddenHash}`;
+        })
         .sort()
         .join('|');
+
+      console.log('[Layout] Data hash check:', {
+        hasDbNodes: !!dbNodes,
+        nodeCount: dbNodes.length,
+        hasPrevHash: !!prevDataHashRef.current,
+        hashChanged: prevDataHashRef.current !== dataHash,
+        currentHash: dataHash.substring(0, 150),
+        prevHash: prevDataHashRef.current?.substring(0, 150)
+      });
 
       if (prevDataHashRef.current && prevDataHashRef.current !== dataHash) {
         console.log('[Layout] Data changed, updating nodes while preserving positions', {
@@ -1208,11 +1368,11 @@ export default function CanvasPage() {
 
       // Save calculated positions to database (debounced)
       const positionsToSave = calculatedNodes
-        .filter(node => !node.parentId) // Only save root nodes
+        .filter(node => !node.parentId && node.position) // Only save root nodes with positions
         .map(node => ({
           nodeId: node.id,
-          x: node.position.x,
-          y: node.position.y,
+          x: node.position!.x,
+          y: node.position!.y,
         }));
 
       console.log('[Layout] Saving calculated positions to database (debounced)', {
@@ -1225,11 +1385,8 @@ export default function CanvasPage() {
   // Node type config
   const nodeTypeConfig = NODE_TYPE_CONFIG;
 
-  // All nodes are always visible (no collapse functionality)
-  const visibleNodes = nodes;
-
   // Helper to check if node matches current filter
-  const matchesFilter = (node: CanvasNode): boolean => {
+  const matchesFilter = useCallback((node: CanvasNode): boolean => {
     // 1. Check if hidden in current framework
     if (currentFramework?.id) {
       const hiddenInFrameworks = (node as any).hiddenInFrameworks;
@@ -1240,18 +1397,23 @@ export default function CanvasPage() {
 
     // 2. Check stage filter
     if (stageFilter !== "all") {
-      const hasStage = node.tags.some((tag) => tag === `stage/${stageFilter}`);
+      const hasStage = node.tags?.some((tag) => tag === `stage/${stageFilter}`);
       if (!hasStage) return false;
     }
 
     // 3. Check tag filter (OR logic: match any selected tag)
     if (selectedTags.length > 0) {
-      const hasAnyTag = node.tags.some((tag) => selectedTags.includes(tag));
+      const hasAnyTag = node.tags?.some((tag) => selectedTags.includes(tag));
       if (!hasAnyTag) return false;
     }
 
     return true;
-  };
+  }, [currentFramework, stageFilter, selectedTags]);
+
+  // Filter nodes based on current filters (hidden, stage, tags)
+  const visibleNodes = useMemo(() => {
+    return nodes.filter(matchesFilter);
+  }, [nodes, matchesFilter]);
 
   // Loading state
   if (isLoading) {
@@ -1332,8 +1494,10 @@ export default function CanvasPage() {
         currentFramework={currentFramework}
         onFrameworkChange={handleFrameworkChange}
         nodes={nodes}
-        suggestions={suggestions}
+        suggestions={dbSuggestions}
+        suggestionsLoading={suggestionsLoading}
         onCreateNode={() => setNodeDialogOpen(true)}
+        onGenerateSuggestions={handleGenerateSuggestions}
       />
 
       <div className="flex-1 flex overflow-hidden">
@@ -1350,6 +1514,7 @@ export default function CanvasPage() {
           currentFramework={currentFramework}
           zoneBounds={zoneBounds}
           getDynamicZoneConfigs={getDynamicZoneConfigs}
+          allNodes={dbNodes || []}
           visibleNodes={visibleNodes}
           selectedNode={selectedNode}
           nodeTypeConfig={nodeTypeConfig}
@@ -1378,6 +1543,9 @@ export default function CanvasPage() {
           overNodeId={overNodeId}
           dropPosition={dropPosition}
           onBackgroundContextMenu={handleBackgroundContextMenu}
+          suggestionsByNode={suggestionsByNode}
+          onApplySuggestion={handleApplySuggestion}
+          onDismissSuggestion={handleDismissSuggestion}
         />
 
         {/* Right Panel */}

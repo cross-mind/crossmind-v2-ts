@@ -6,6 +6,8 @@ import {
 } from "@/lib/db/queries";
 import { ChatSDKError } from "@/lib/errors";
 
+export const dynamic = "force-dynamic";
+
 /**
  * POST /api/canvas/suggestions/[id]/dismiss
  *
@@ -20,7 +22,7 @@ export async function POST(
     // Auth check
     const session = await auth();
     if (!session?.user?.id) {
-      return new ChatSDKError("unauthorized").toResponse();
+      return new ChatSDKError("unauthorized:suggestions").toResponse();
     }
 
     const { id } = await params;
@@ -28,13 +30,13 @@ export async function POST(
     // Get suggestion
     const suggestion = await getCanvasSuggestionById({ id });
     if (!suggestion) {
-      return new ChatSDKError("not_found", "Suggestion not found").toResponse();
+      return new ChatSDKError("not_found:suggestions", "Suggestion not found").toResponse();
     }
 
     // Check if already dismissed
     if (suggestion.status === "dismissed") {
       return new ChatSDKError(
-        "invalid:suggestion-status",
+        "bad_request:suggestions",
         "Suggestion is already dismissed"
       ).toResponse();
     }

@@ -8,6 +8,8 @@ import {
   updateCanvasNode,
 } from "@/lib/db/queries";
 
+export const dynamic = "force-dynamic";
+
 // GET /api/canvas/[id]
 export async function GET(
   request: Request,

@@ -2,6 +2,7 @@
 
 import { Activity, TrendingUp, AlertCircle, Sparkles } from "lucide-react";
 import { MOCK_USER, type NodeContent, type AISuggestion } from "../canvas-data";
+import { normalizeHealthScore } from "../lib/canvas-utils";
 import {
   Popover,
   PopoverContent,
@@ -27,7 +28,7 @@ export function HealthOverview({ nodes, suggestions }: HealthOverviewProps) {
   // 计算平均分
   const avgScore = nodesWithHealth.length > 0
     ? Math.round(
-        nodesWithHealth.reduce((sum, n) => sum + (n.healthScore || 0), 0) /
+        nodesWithHealth.reduce((sum, n) => sum + normalizeHealthScore(n.healthScore), 0) /
           nodesWithHealth.length
       )
     : 0;
@@ -40,14 +41,15 @@ export function HealthOverview({ nodes, suggestions }: HealthOverviewProps) {
     id: string;
     title: string;
     description: string;
-    type: "add-node" | "add-tag" | "refine-content" | "health-issue";
+    type: "add-node" | "add-tag" | "refine-content" | "content-suggestion" | "health-issue";
     nodeId?: string;
   }> = [];
 
   // 添加节点健康度建议
   nodesWithHealth.forEach((node) => {
-    if (node.healthData?.suggestions) {
-      node.healthData.suggestions.forEach((suggestion, index) => {
+    const healthData = node.healthData as { dimensions: any; suggestions: string[] } | undefined;
+    if (healthData?.suggestions) {
+      healthData.suggestions.forEach((suggestion, index) => {
         allSuggestions.push({
           id: `${node.id}-suggestion-${index}`,
           title: node.title,

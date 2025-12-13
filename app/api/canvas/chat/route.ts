@@ -63,7 +63,7 @@ const getTokenlensCatalog = cache(
   { revalidate: 24 * 60 * 60 },
 );
 
-export function getStreamContext() {
+function getStreamContext() {
   if (!globalStreamContext) {
     try {
       globalStreamContext = createResumableStreamContext({
@@ -163,7 +163,7 @@ export async function POST(request: Request) {
             name: framework.name,
             zones: framework.zones?.map((z) => ({
               name: z.name,
-              description: z.description,
+              description: z.description ?? "",
             })),
           }
         : undefined,
@@ -201,10 +201,15 @@ export async function POST(request: Request) {
             }),
           },
           onFinish: async ({ usage }) => {
+            if (!modelCatalog) {
+              finalMergedUsage = usage;
+              dataStream.write({ type: "data-usage", data: finalMergedUsage });
+              return;
+            }
             const summary = getUsage({
               modelId: "chat-model",
               usage,
-              providers: modelCatalog?.data?.providers,
+              providers: modelCatalog,
             });
             finalMergedUsage = { ...usage, ...summary, modelId: "chat-model" } as AppUsage;
             dataStream.write({ type: "data-usage", data: finalMergedUsage });
@@ -218,7 +223,7 @@ export async function POST(request: Request) {
       onFinish: async ({ messages }) => {
         // Save assistant messages
         await saveMessages({
-          messages: messages.map((msg: ChatMessage) => ({
+          messages: messages.map((msg) => ({
             id: msg.id,
             role: msg.role,
             parts: msg.parts,

@@ -4,6 +4,7 @@
  */
 
 import type { CanvasNode as DBCanvasNode } from "@/lib/db/schema";
+import type { ZoneAffinities } from "@/lib/types";
 
 export type StageFilter = "all" | "ideation" | "research" | "design" | "dev" | "launch";
 
@@ -17,7 +18,7 @@ export interface NodeContent {
   health?: number;
   references?: string[];
   children?: string[];
-  zoneAffinities?: Record<string, Record<string, number>>;
+  zoneAffinities?: ZoneAffinities;
 }
 
 export interface CanvasNode extends NodeContent {

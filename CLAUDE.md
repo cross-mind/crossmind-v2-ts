@@ -25,7 +25,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    - Check database queries and data flow
 
 3. **Fallback Methods** (if Chrome DevTools unavailable):
-   - Test scripts in `scripts/` directory
    - curl commands for API testing
    - Direct database queries
 
@@ -50,12 +49,6 @@ Password:    test123456
 User ID:     cdfbc0e9-e288-478c-87e5-f7057591e5a1
 Project ID:  6f41921c-8970-4faa-a6c0-7180af8384ee
 Tier:        pro (500 health checks/month)
-```
-
-### Setup Script
-If the test user needs to be recreated or a new environment setup:
-```bash
-npx tsx scripts/setup-test-user.ts
 ```
 
 ### Usage
@@ -126,9 +119,8 @@ npx playwright test --headed
    b. **Server logs** (always available):
       - Monitor console.log output
       - Verify API calls and data flow
-   c. **Test scripts**:
-      - Use scripts in `scripts/` directory
-      - Query database directly
+   c. **Direct database queries**:
+      - Query database directly for verification
    d. **curl commands**:
       - Test API endpoints directly
 
@@ -519,6 +511,45 @@ Commit message prefixes:
 4. Hover states: `hover:bg-muted/40`, `transition-colors`
 5. Avoid custom spacing values and unnecessary decorations
 
+### Adding New API Routes with Authentication
+
+**CRITICAL**: When creating API routes that use `auth()`, you **MUST** add `export const dynamic = "force-dynamic"` to prevent Next.js 16 prerendering errors.
+
+**Why this is required**:
+- Next.js 16 attempts to prerender routes during build by default
+- `auth()` internally uses `headers()` which is not allowed during prerendering
+- Without `dynamic = "force-dynamic"`, the build will fail with: `During prerendering, headers() rejects when the prerender is complete`
+
+**Example**:
+```typescript
+import { NextResponse } from "next/server";
+import { auth } from "@/app/(auth)/auth";
+import { ChatSDKError } from "@/lib/errors";
+
+export const dynamic = "force-dynamic"; // ← REQUIRED for auth routes
+
+export async function GET(request: Request) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return new ChatSDKError("unauthorized:api").toResponse();
+  }
+
+  try {
+    // Your logic here
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error("[API Error]", error);
+    return new ChatSDKError("bad_request:api").toResponse();
+  }
+}
+```
+
+**VSCode Snippet**: Type `api-auth-route` to generate the correct template with all required imports and exports.
+
+**Verification**: Run `pnpm verify:routes` before committing to ensure all auth routes have dynamic markers.
+
+**Exception**: Use `export const maxDuration = 60` instead if the route needs extended execution time (e.g., streaming endpoints).
+
 ## Known Issues & Solutions
 
 ### Canvas Component Type System
@@ -526,16 +557,14 @@ Commit message prefixes:
 - **Reason**: Defining custom types causes conflicts (`parentId: string | null` vs `string | undefined`)
 - **Solution**: Always import `type { CanvasNode } from "../canvas-data"` in Canvas components
 
-### Canvas Data Loading with SWR
-- **Issue**: useMemo + SWR 可能在 loading 期间 fallback 到 mock 数据
-- **Solution**: 先检查 `isLoading` 状态再做 fallback 判断
-```typescript
-const data = useMemo(() => {
-  if (isLoading) return []; // 加载中不要 fallback
-  if (!dbData?.length) return MOCK_DATA;
-  return dbData;
-}, [dbData, isLoading]);
-```
+### Canvas Tag Format
+- **Issue**: Tags stored as simple strings (like `high`, `critical`) all appear in "OTHER" group in TagFilter
+- **Reason**: TagFilter component expects tags in `namespace/value` format (like `priority/high`, `category/design`)
+- **Solution**: Always use namespaced tags:
+  - Priority tags: `priority/critical`, `priority/high`, `priority/medium`
+  - Category tags: `category/design`, `category/dev`, `category/doc`, etc.
+  - Type tags: `type/feature`, `type/idea`, `type/task`
+  - Stage tags: `stage/ideation`, `stage/validation`, `stage/implementation`
 
 ### Chrome DevTools MCP
 - 连接断开时立即报告用户，不要重试
@@ -549,62 +578,36 @@ const data = useMemo(() => {
 - 不能同时有单独的 `id` 主键和复合主键
 - 只保留复合主键：`primaryKey({ columns: [table.a, table.b] })`
 
-### Canvas Drag-Drop Animation Issue
-- **Issue**: After drag-drop, nodes "fly in from left side" instead of smoothly transitioning from current position
-- **Root Cause**: Data change detection was calling `setNodes([])`, causing layout algorithm to reset all positions to off-screen `{ x: -9999, y: -9999 }` for measurement
-- **Solution**: Distinguish between "node add/remove" (needs full reset) vs "data only change" (preserve positions):
-```typescript
-// In data change detection useEffect:
-if (nodesAdded || nodesRemoved) {
-  setNodes([]); // Full recalculation
-} else {
-  // Preserve positions during data updates
-  setNodes(prevNodes => prevNodes.map(prevNode => ({
-    ...updatedContent,
-    position: prevNode.position // Keep existing position
-  })));
-}
-```
-- **Result**: Nodes now smoothly transition via CSS `transition-all duration-300` from current position to new calculated position
-- **Documentation**: See [DRAG_DROP_ANIMATION_FIX.md](DRAG_DROP_ANIMATION_FIX.md) for complete analysis
+### VPN Environment Build Issues
+- **Issue**: Next.js build fails to fetch Google Fonts with SSL certificate errors when using VPN
+- **Root Cause**:
+  - VPN routes `fonts.googleapis.com` through private DNS (198.18.0.2)
+  - Resolves to VPN gateway IP (198.18.0.58) instead of Google's servers
+  - VPN presents wrong SSL certificate (CN: upload.video.google.com)
+- **Symptoms**:
+  ```
+  curl: (35) LibreSSL SSL_connect: SSL_ERROR_SYSCALL
+  Error while requesting resource: Failed to fetch Geist from Google Fonts
+  ```
+- **Solution**: Configure `.env.local` to skip TLS verification (local development only):
+  ```bash
+  NODE_TLS_REJECT_UNAUTHORIZED=0
+  ```
+- **Security Note**: Only use this in local development. Never deploy with this setting to production
+- **Alternative Solutions**:
+  1. Add `fonts.googleapis.com` to VPN bypass list
+  2. Download fonts locally to `public/fonts/` and use local font files
+  3. Use system fonts as fallback
 
-### Canvas Drag-Drop Zone Isolation Issue
-- **Issue**: Dragging one node causes nodes in other zones to move unexpectedly
-- **Root Cause**: Layout algorithm used unstable greedy column assignment + nodes not sorted by displayOrder
-- **Problems**:
-  1. `rootNodeIds` not sorted → random iteration order → unstable positions
-  2. Greedy algorithm `indexOf(Math.min(...))` → column selection depends on other nodes' heights → nodes jump between columns
-- **Solution**: Stable layout algorithm with two key changes:
-```typescript
-// 1. Sort by displayOrder before layout
-const sortedRootNodeIds = rootNodeIds.sort((a, b) => {
-  return (contentA?.displayOrder ?? 0) - (contentB?.displayOrder ?? 0);
-});
-
-// 2. Use round-robin column assignment (not greedy)
-sortedRootNodeIds.forEach((nodeId, index) => {
-  const currentColumn = index % config.columnCount; // Stable assignment
-  // ...
-});
-```
-- **Result**: Same displayOrder + same nodeHeights → same positions every time. Dragging a node only affects nodes in the same zone.
-- **Trade-off**: Columns may not be perfectly balanced in height, but positions are stable and predictable
-- **Documentation**: See [DRAG_DROP_ZONE_ISOLATION_FIX.md](DRAG_DROP_ZONE_ISOLATION_FIX.md) for complete analysis
-
-### Canvas Drag-Drop Zone Stability Issue (Critical)
-- **Issue**: Nodes randomly jump between zones after every drag operation, with no discernible pattern
-- **Root Cause**: ALL nodes lack `zoneAffinities` data, triggering fallback logic that used unstable array index `indexOf(node)`
-- **Why indexOf() is unstable**: Array order in `nodeContents` can change after SWR refetch, causing same node to get different index → different zone
-- **Solution**: Use stable displayOrder-based hashing instead of array index:
-```typescript
-// Fallback zone assignment (when no zoneAffinities)
-const displayOrder = node.displayOrder ?? 0;
-const assignedZoneIndex = Math.floor(displayOrder / 10000) % zoneCount;
-const fallbackZone = currentFramework.zones[assignedZoneIndex].id;
-```
-- **Algorithm**: Divides displayOrder space into 10000-unit segments (0-9999 → zone 0, 10000-19999 → zone 1, etc.)
-- **Result**: Same displayOrder → same zone assignment, always. Small drag adjustments (±1000) stay in same zone. Only large moves (10000+) change zones.
-- **Documentation**: See [DRAG_DROP_ZONE_STABILITY_FIX.md](DRAG_DROP_ZONE_STABILITY_FIX.md) for complete analysis
+### Next.js 15 vs 16 Build Compatibility
+- **Issue**: Next.js 16 has regression bugs with `useContext` during prerendering
+- **Solution**: Project uses Next.js 15.3.8 with experimental build mode
+- **Build Command**: `next build --experimental-build-mode=compile`
+- **Configuration**: Set in `package.json` scripts
+- **Related Issues**:
+  - [GitHub #85668](https://github.com/vercel/next.js/issues/85668) - useContext null error
+  - [GitHub #82366](https://github.com/vercel/next.js/issues/82366) - 404/500 prerendering
+- **When to Upgrade**: Wait for Next.js 16.1+ stable release with fixes
 
 ## Debugging
 
@@ -612,8 +615,3 @@ const fallbackZone = currentFramework.zones[assignedZoneIndex].id;
 - 使用三层日志系统：API → SWR → Component
 - 用 `[Layer Name]` 前缀标识日志来源
 - 示例：`[Canvas API]`, `[SWR Hook]`, `[Canvas Page]`
-
-### Database Testing
-- 使用 `scripts/` 目录中的测试脚本直接查询数据库
-- 命名模式：`test-*.ts` 用于验证，`seed-*.ts` 用于填充测试数据
-- 运行方式：`npx tsx scripts/script-name.ts`

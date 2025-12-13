@@ -144,7 +144,7 @@ export function NodeDetailPanel({
               <Badge variant="secondary" className="text-[10px]">
                 {config.emoji} {config.label}
               </Badge>
-              {selectedNode.tags.slice(0, 2).map((tag) => {
+              {selectedNode.tags?.slice(0, 2).map((tag) => {
                 const [, value] = tag.split("/");
                 return (
                   <span key={tag} className="text-[10px] text-muted-foreground">
@@ -252,7 +252,7 @@ export function NodeDetailPanel({
                   {selectedNode.dueDate && (
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">Due Date</span>
-                      <span>{selectedNode.dueDate}</span>
+                      <span>{selectedNode.dueDate instanceof Date ? selectedNode.dueDate.toLocaleDateString() : selectedNode.dueDate}</span>
                     </div>
                   )}
                 </div>
@@ -289,7 +289,7 @@ export function NodeDetailPanel({
                   {selectedNode.capturedAt && (
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">Captured At</span>
-                      <span>{selectedNode.capturedAt}</span>
+                      <span>{selectedNode.capturedAt instanceof Date ? selectedNode.capturedAt.toLocaleDateString() : selectedNode.capturedAt}</span>
                     </div>
                   )}
                 </div>
@@ -342,7 +342,7 @@ export function NodeDetailPanel({
                 Tags
               </h4>
               <div className="flex flex-wrap gap-2">
-                {selectedNode.tags.map((tag) => {
+                {selectedNode.tags?.map((tag) => {
                   const [namespace, value] = tag.split("/");
                   return (
                     <Badge key={tag} variant="outline" className="text-xs">

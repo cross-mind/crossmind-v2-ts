@@ -1,6 +1,6 @@
 "use client";
 
-import { Sparkles, Plus } from "lucide-react";
+import { Sparkles, Plus, Loader2 } from "lucide-react";
 import { SidebarToggle } from "@/components/sidebar-toggle";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,9 @@ interface CanvasHeaderProps {
   onFrameworkChange: (framework: ThinkingFramework) => void;
   nodes: CanvasNode[];
   suggestions: AISuggestion[];
+  suggestionsLoading?: boolean;
   onCreateNode: () => void;
+  onGenerateSuggestions?: () => void;
 }
 
 export function CanvasHeader({
@@ -21,7 +23,9 @@ export function CanvasHeader({
   onFrameworkChange,
   nodes,
   suggestions,
+  suggestionsLoading,
   onCreateNode,
+  onGenerateSuggestions,
 }: CanvasHeaderProps) {
   return (
     <header className="flex h-14 items-center justify-between gap-2 border-b bg-background px-4 shrink-0">
@@ -51,6 +55,24 @@ export function CanvasHeader({
         />
 
         <Separator orientation="vertical" className="h-6" />
+
+        {/* Generate Suggestions Button */}
+        {onGenerateSuggestions && currentFramework && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 gap-2"
+            onClick={onGenerateSuggestions}
+            disabled={suggestionsLoading}
+          >
+            {suggestionsLoading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4" />
+            )}
+            重新分析
+          </Button>
+        )}
 
         {/* Health Overview (now includes suggestions) */}
         <HealthOverview nodes={nodes} suggestions={suggestions} />

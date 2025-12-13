@@ -9,6 +9,8 @@ import {
 import { ChatSDKError } from "@/lib/errors";
 import { convertToUIMessages } from "@/lib/utils";
 
+export const dynamic = "force-dynamic";
+
 /**
  * GET /api/canvas/chat-session?nodeId={nodeId}
  *

@@ -50,3 +50,8 @@ export type Attachment = {
   url: string;
   contentType: string;
 };
+
+/**
+ * Zone affinities mapping: framework ID -> zone ID -> weight (1-10)
+ */
+export type ZoneAffinities = Record<string, Record<string, number>>;

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/app/(auth)/auth";
 import { ChatSDKError } from "@/lib/errors";
+import type { ZoneAffinities } from "@/lib/types";
 import {
   createCanvasComment,
   createCanvasNode,
@@ -17,7 +18,7 @@ export async function createNodeAction(data: {
   parentId?: string;
   tags?: string[];
   positions?: Record<string, { x: number; y: number }>;
-  zoneAffinities?: Record<string, Record<string, number>>;
+  zoneAffinities?: ZoneAffinities;
   displayOrder?: number;
   taskStatus?: "todo" | "in-progress" | "done";
   assigneeId?: string;

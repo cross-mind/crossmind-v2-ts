@@ -31,21 +31,21 @@ export const createNode = ({ session, dataStream, context }: CreateNodeProps) =>
           content,
           type,
           projectId: context.projectId,
-          parentId: parentId || null,
+          parentId: parentId || undefined,
           tags: tags || [],
           createdById: session.user.id,
         });
 
         // Notify frontend via data stream
         dataStream.write({
-          type: "node-created" as any,
+          type: "node-created",
           data: {
             nodeId: newNode.id,
             title: newNode.title,
             type: newNode.type,
           },
           transient: true,
-        });
+        } as any);
 
         return {
           success: true,

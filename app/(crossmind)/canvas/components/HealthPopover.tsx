@@ -2,6 +2,7 @@
 
 import { CheckCircle2, AlertCircle, XCircle, TrendingUp } from "lucide-react";
 import { type NodeContent } from "../canvas-data";
+import { normalizeHealthScore } from "../lib/canvas-utils";
 import {
   HoverCard,
   HoverCardContent,
@@ -20,7 +21,7 @@ export function HealthPopover({ node, children }: HealthPopoverProps) {
   }
 
   const { healthScore, healthLevel, healthData } = node;
-  const { dimensions, suggestions } = healthData;
+  const { dimensions, suggestions } = (healthData || {}) as { dimensions?: any; suggestions?: string[] };
 
   const getScoreIcon = (score: number) => {
     if (score >= 80) return <CheckCircle2 className="h-4 w-4 text-green-600" />;
@@ -43,8 +44,8 @@ export function HealthPopover({ node, children }: HealthPopoverProps) {
           <div>
             <h4 className="text-sm font-semibold mb-1">健康度诊断</h4>
             <div className="flex items-baseline gap-2">
-              <span className={`text-2xl font-bold ${getScoreColor(healthScore)}`}>
-                {healthScore}
+              <span className={`text-2xl font-bold ${getScoreColor(normalizeHealthScore(healthScore))}`}>
+                {normalizeHealthScore(healthScore)}
               </span>
               <span className="text-sm text-muted-foreground">/100</span>
             </div>
@@ -125,7 +126,7 @@ export function HealthPopover({ node, children }: HealthPopoverProps) {
               <TrendingUp className="h-3 w-3 mr-1.5" />
               查看详细分析
             </Button>
-            {healthScore < 70 && (
+            {normalizeHealthScore(healthScore) < 70 && (
               <Button size="sm" className="w-full text-xs bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600">
                 💎 雇佣专家改进
               </Button>

@@ -158,7 +158,7 @@ export function useCanvasDragDrop({
             if (n.parentId) return false;
 
             // 检查节点是否属于这个 zone
-            const affinities = n.zoneAffinities?.[currentFramework.id] as Record<string, number> | undefined;
+            const affinities = (n.zoneAffinities as Record<string, Record<string, number>> | undefined)?.[currentFramework.id] as Record<string, number> | undefined;
             if (affinities) {
               // 找到权重最高的 zone
               let bestZone = Object.keys(affinities)[0];
@@ -335,7 +335,7 @@ export function useCanvasDragDrop({
           }
 
           // 检查目标节点的 zone affinity
-          const targetNodeAffinities = targetNode.zoneAffinities?.[currentFramework.id] as Record<string, number> | undefined;
+          const targetNodeAffinities = (targetNode.zoneAffinities as Record<string, Record<string, number>> | undefined)?.[currentFramework.id] as Record<string, number> | undefined;
           let targetZoneId: string | null = null;
 
           if (targetNodeAffinities && targetNode.parentId === null) {

@@ -6,35 +6,47 @@
  * - Layout: Visual positioning, can be recalculated
  */
 
+import type { ZoneAffinities } from "@/lib/types";
+
 // ============================================
 // Core Types
 // ============================================
+
+/**
+ * Zone affinities mapping: framework ID -> zone ID -> weight (1-10)
+ * Re-exported from lib/types for convenience
+ */
+export type { ZoneAffinities };
 
 export interface NodeContent {
   id: string;
   title: string;
   type: "document" | "idea" | "task" | "inspiration";
   content: string;
-  tags: string[];
-  parentId?: string;
-  children?: string[];
-  references?: string[];
+  tags: string[] | null;
+  parentId?: string | null;
+  children?: string[] | null;
+  references?: string[] | null;
   // Display order for sorting (drag-drop support)
-  displayOrder?: number;
+  displayOrder?: number | null;
   // Task-specific
-  taskStatus?: "todo" | "in-progress" | "done";
-  assignee?: string;
-  dueDate?: string;
+  taskStatus?: "todo" | "in-progress" | "done" | null;
+  assignee?: string | null;
+  dueDate?: string | Date | null;
   // Inspiration-specific
-  source?: string;
-  capturedAt?: string;
+  source?: string | null;
+  capturedAt?: string | Date | null;
   // Framework zone mappings (节点到各框架区域的映射关系)
   // 格式: { "framework-id": { "zone-id": weight } }
   // weight 越高,节点越适合放在该区域 (1-10)
-  zoneAffinities?: Record<string, Record<string, number>>;
+  zoneAffinities?: ZoneAffinities | null;
+  // Framework-specific visibility (节点在各框架中的隐藏状态)
+  // 格式: { "framework-id": boolean }
+  // true 表示在该框架中隐藏
+  hiddenInFrameworks?: Record<string, boolean> | null;
   // Health data (付费功能)
-  healthScore?: number;
-  healthLevel?: "critical" | "warning" | "good" | "excellent";
+  healthScore?: number | string | null;
+  healthLevel?: "critical" | "warning" | "good" | "excellent" | null;
   healthData?: {
     dimensions: {
       completeness: { score: number; issues: string[] };
@@ -42,7 +54,7 @@ export interface NodeContent {
       feasibility: { score: number; issues: string[] };
     };
     suggestions: string[];
-  };
+  } | unknown;
 }
 
 export interface NodeLayout {
@@ -73,7 +85,7 @@ export interface Comment {
 
 export interface AISuggestion {
   id: string;
-  type: "add-node" | "add-tag" | "refine-content";
+  type: "add-node" | "add-tag" | "refine-content" | "content-suggestion" | "health-issue";
   title: string;
   description: string;
 }
@@ -819,4 +831,11 @@ export const MOCK_SUGGESTIONS: AISuggestion[] = [
 ];
 
 // Re-export for compatibility
-export type CanvasNode = NodeContent & { position: { x: number; y: number } };
+export type CanvasNode = NodeContent & {
+  position?: { x: number; y: number };
+  x?: number;  // Flat x coordinate (used by layout algorithm)
+  y?: number;  // Flat y coordinate (used by layout algorithm)
+  width?: number;
+  height?: number;
+  zoneId?: string;
+};

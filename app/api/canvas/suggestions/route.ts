@@ -3,6 +3,8 @@ import { auth } from "@/app/(auth)/auth";
 import { getCanvasSuggestionsByFramework, getCanvasSuggestionsByNode } from "@/lib/db/queries";
 import { ChatSDKError } from "@/lib/errors";
 
+export const dynamic = "force-dynamic";
+
 /**
  * GET /api/canvas/suggestions
  *
@@ -19,7 +21,7 @@ export async function GET(request: NextRequest) {
     // Auth check
     const session = await auth();
     if (!session?.user?.id) {
-      return new ChatSDKError("unauthorized").toResponse();
+      return new ChatSDKError("unauthorized:suggestions").toResponse();
     }
 
     // Parse query parameters
@@ -31,7 +33,7 @@ export async function GET(request: NextRequest) {
 
     if (!projectId) {
       return new ChatSDKError(
-        "invalid:params",
+        "bad_request:suggestions",
         "projectId is required"
       ).toResponse();
     }
@@ -54,7 +56,7 @@ export async function GET(request: NextRequest) {
       });
     } else {
       return new ChatSDKError(
-        "invalid:params",
+        "bad_request:suggestions",
         "Either frameworkId or nodeId is required"
       ).toResponse();
     }

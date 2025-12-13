@@ -17,7 +17,12 @@
       "Bash(pnpm build:*)",
       "Bash(lsof:*)",
       "Bash(pnpm db:migrate:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(while read f)",
+      "Bash(do if grep -q \"await auth()\" \"$f\")",
+      "Bash(then echo \"$f\")",
+      "Bash(fi)",
+      "Bash(done)"
     ],
     "deny": [],
     "ask": []
