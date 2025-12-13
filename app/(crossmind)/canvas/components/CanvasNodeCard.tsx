@@ -280,21 +280,25 @@ export function CanvasNodeCard({
         {/* Drop indicators for parent nodes */}
         <DropIndicator position="top" isActive={isDragOver === true && dropPosition === "top"} />
         <DropIndicator position="bottom" isActive={isDragOver === true && dropPosition === "bottom"} />
-        {/* Health Badge */}
-        <NodeHealthBadge node={node} />
-
-        {/* Suggestion Badge with Popover */}
+        {/* Suggestion Badge with Popover - positioned to avoid title overlap */}
         {nodeSuggestions.length > 0 && (
           <SuggestionPopover
             suggestions={nodeSuggestions}
             onApply={onApplySuggestion}
             onDismiss={onDismissSuggestion}
           >
-            <div className="absolute top-2 right-14">
+            <div className={cn(
+              "absolute top-2",
+              // Position based on whether health badge exists
+              node.healthScore !== undefined ? "right-[72px]" : "right-2"
+            )}>
               <NodeSuggestionBadge count={nodeSuggestions.length} />
             </div>
           </SuggestionPopover>
         )}
+
+        {/* Health Badge - always at right-2 */}
+        <NodeHealthBadge node={node} />
 
         {/* Header */}
         <div className="flex items-start gap-2 mb-3">
@@ -307,7 +311,7 @@ export function CanvasNodeCard({
             <Icon className={cn("h-4 w-4", config.color.replace("bg-", "text-"))} />
           </div>
 
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 pr-20">
             <h3 className="font-medium text-sm leading-snug mb-1">{node.title}</h3>
             <div className="flex items-center gap-1.5 flex-wrap">
               <Badge variant="secondary" className="text-[10px] font-normal">

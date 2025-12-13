@@ -57,6 +57,9 @@ export interface ChatProps {
     allowModelSwitch?: boolean;
     compactInput?: boolean;
   };
+  // Pre-filled input for suggestions
+  initialInput?: string;
+  onInitialInputSent?: () => void;
 }
 
 export function Chat({
@@ -72,6 +75,8 @@ export function Chat({
   context = { type: "general" },
   apiEndpoint = "/api/chat",
   features = {},
+  initialInput,
+  onInitialInputSent,
 }: ChatProps) {
   // Apply feature defaults
   const {
@@ -106,15 +111,23 @@ export function Chat({
   }, [router, mode]);
   const { setDataStream } = useDataStream();
 
-  const [input, setInput] = useState<string>("");
+  const [input, setInput] = useState<string>(initialInput || "");
   const [usage, setUsage] = useState<AppUsage | undefined>(initialLastContext);
   const [showCreditCardAlert, setShowCreditCardAlert] = useState(false);
   const [currentModelId, setCurrentModelId] = useState(initialChatModel);
   const currentModelIdRef = useRef(currentModelId);
+  const initialInputSentRef = useRef(false);
 
   useEffect(() => {
     currentModelIdRef.current = currentModelId;
   }, [currentModelId]);
+
+  // Pre-fill input when initialInput is provided
+  useEffect(() => {
+    if (initialInput && !initialInputSentRef.current) {
+      setInput(initialInput);
+    }
+  }, [initialInput]);
 
   const { messages, setMessages, sendMessage, status, stop, regenerate, resumeStream } =
     useChat<ChatMessage>({
@@ -177,6 +190,12 @@ export function Chat({
         // Only mutate chat history in full-page mode (not in Canvas panel mode)
         if (mode === "full-page") {
           mutate(unstable_serialize(getChatHistoryPaginationKey));
+        }
+
+        // If this was the initial input, mark it as sent and notify parent
+        if (initialInput && !initialInputSentRef.current) {
+          initialInputSentRef.current = true;
+          onInitialInputSent?.();
         }
       },
       onError: (error) => {

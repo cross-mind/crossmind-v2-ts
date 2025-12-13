@@ -55,12 +55,14 @@ interface NodeDetailPanelProps {
   showAIChat: boolean;
   commentInput: string;
   projectId: string;  // Add projectId prop for Canvas AI chat
+  pendingAIChatPrompt?: { nodeId: string; prompt: string } | null;
   onClose: () => void;
   onSetShowAIChat: (show: boolean) => void;
   onNodeClick: (node: CanvasNode, e: React.MouseEvent) => void;
   onAddTag: (nodeId: string) => void;
   onCommentInputChange: (value: string) => void;
   onAddComment: () => void;
+  onClearPendingPrompt?: () => void;
   getFeedActivities: (nodeId: string) => FeedActivity[];
   getComments: (nodeId: string) => Comment[];
   processContentWithReferences: (content: string) => string;
@@ -74,12 +76,14 @@ export function NodeDetailPanel({
   showAIChat,
   commentInput,
   projectId,
+  pendingAIChatPrompt,
   onClose,
   onSetShowAIChat,
   onNodeClick,
   onAddTag,
   onCommentInputChange,
   onAddComment,
+  onClearPendingPrompt,
   getFeedActivities,
   getComments,
   processContentWithReferences,
@@ -494,6 +498,7 @@ export function NodeDetailPanel({
               </div>
             ) : sessionId ? (
               <Chat
+                key={pendingAIChatPrompt?.prompt ? `${sessionId}-${pendingAIChatPrompt.nodeId}` : sessionId}
                 id={sessionId}
                 initialMessages={initialMessages}
                 mode="panel"
@@ -514,6 +519,8 @@ export function NodeDetailPanel({
                 autoResume={false}
                 initialChatModel="chat-model"
                 initialVisibilityType="private"
+                initialInput={pendingAIChatPrompt?.prompt}
+                onInitialInputSent={onClearPendingPrompt}
               />
             ) : (
               <div className="flex items-center justify-center h-full text-sm text-muted-foreground">

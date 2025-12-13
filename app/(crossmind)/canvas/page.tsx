@@ -1624,12 +1624,18 @@ export default function CanvasPage() {
             showAIChat={showAIChat}
             commentInput={commentInput}
             projectId={projectId}
+            pendingAIChatPrompt={
+              pendingAIChatPrompt?.nodeId === selectedNode.id
+                ? pendingAIChatPrompt
+                : null
+            }
             onClose={handleClosePanel}
             onSetShowAIChat={handleSetShowAIChat}
             onNodeClick={handleNodeClick}
             onAddTag={handleAddTag}
             onCommentInputChange={setCommentInput}
             onAddComment={() => selectedNode && handleAddComment(selectedNode.id)}
+            onClearPendingPrompt={() => setPendingAIChatPrompt(null)}
             getFeedActivities={getFeedActivities}
             getComments={getComments}
             processContentWithReferences={processContentWithReferences}
