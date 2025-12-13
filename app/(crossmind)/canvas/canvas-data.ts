@@ -833,40 +833,6 @@ export const MOCK_FEED: { [key: string]: FeedActivity[] } = {
   ],
 };
 
-export const MOCK_COMMENTS: { [key: string]: Comment[] } = {
-  "task-canvas-impl": [
-    {
-      id: "comment-1",
-      user: "Sarah",
-      content: "@Alex Canvas 拖拽功能进展如何？",
-      timestamp: "2024-12-09 12:15",
-      mentions: ["Alex"],
-    },
-    {
-      id: "comment-2",
-      user: "Alex",
-      content: "拖拽基本完成，节点引用跳转功能还在调试",
-      timestamp: "2024-12-09 13:40",
-    },
-  ],
-  "market-research-1": [
-    {
-      id: "comment-3",
-      user: "Alex",
-      content: "调研结果很有价值！用户痛点和我们的产品定位完全吻合",
-      timestamp: "2024-12-08 16:00",
-    },
-  ],
-  "vision-1": [
-    {
-      id: "comment-4",
-      user: "Sarah",
-      content: "产品愿景很清晰，建议补充量化的目标数据",
-      timestamp: "2024-12-08 18:30",
-    },
-  ],
-};
-
 export const MOCK_SUGGESTIONS: AISuggestion[] = [
   {
     id: "sug-1",

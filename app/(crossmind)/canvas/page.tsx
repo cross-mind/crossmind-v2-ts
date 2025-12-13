@@ -161,6 +161,12 @@ export default function CanvasPage() {
   const [suggestions] = useState<AISuggestion[]>(MOCK_SUGGESTIONS);
   const [stageFilter, setStageFilter] = useState<StageFilterType>("all");
 
+  // Hook to fetch comments for selected node
+  const {
+    comments: dbComments,
+    isLoading: commentsLoading,
+  } = useCanvasComments(selectedNode?.id || null);
+
   // Framework switcher state - initialize from database
   const [currentFramework, setCurrentFramework] = useState<ThinkingFramework | null>(null);
 
@@ -509,9 +515,21 @@ export default function CanvasPage() {
     return MOCK_FEED[nodeId] || [];
   };
 
-  const getComments = (nodeId: string): Comment[] => {
-    return MOCK_COMMENTS[nodeId] || [];
-  };
+  // Build user lookup map (temporary solution)
+  const userMap = useMemo(() => {
+    const map = new Map<string, string>();
+    if (session?.user?.id && session?.user?.email) {
+      map.set(session.user.id, session.user.email);
+    }
+    return map;
+  }, [session]);
+
+  // Transform database comments to UI format
+  const getComments = useCallback((nodeId: string): Comment[] => {
+    if (!selectedNode || selectedNode.id !== nodeId) return [];
+    if (commentsLoading) return [];
+    return (dbComments || []).map(c => mapCommentToUI(c, userMap));
+  }, [selectedNode, dbComments, commentsLoading, userMap]);
 
   const handleOpenAIChat = (node: CanvasNode) => {
     setSelectedNode(node);

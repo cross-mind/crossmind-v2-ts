@@ -115,8 +115,8 @@ export function useCanvasActions({ projectId, nodes, currentFrameworkId }: UseCa
           content: commentInput,
         });
         setCommentInput("");
-        // Revalidate SWR cache
-        mutate(`/api/canvas?projectId=${projectId}`);
+        // Revalidate comments cache for this specific node
+        mutate(`/api/canvas/${nodeId}/comments`);
       } catch (error) {
         console.error("Failed to add comment:", error);
         throw error;
