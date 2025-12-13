@@ -797,42 +797,6 @@ export function getAllNodeContents() {
 // Activity & Comments Data
 // ============================================
 
-export const MOCK_FEED: { [key: string]: FeedActivity[] } = {
-  "task-canvas-impl": [
-    {
-      id: "feed-1",
-      type: "status_changed",
-      user: "Alex",
-      timestamp: "2024-12-09 14:30",
-      description: "将状态更改为「进行中」",
-      details: "从「待开始」→「进行中」",
-    },
-    {
-      id: "feed-2",
-      type: "created",
-      user: "Alex",
-      timestamp: "2024-12-08 16:20",
-      description: "创建了此任务",
-    },
-  ],
-  "vision-1": [
-    {
-      id: "feed-4",
-      type: "updated",
-      user: "Alex",
-      timestamp: "2024-12-09 11:45",
-      description: "更新了产品愿景文档",
-    },
-    {
-      id: "feed-5",
-      type: "created",
-      user: "Sarah",
-      timestamp: "2024-12-08 10:00",
-      description: "创建了此文档",
-    },
-  ],
-};
-
 export const MOCK_SUGGESTIONS: AISuggestion[] = [
   {
     id: "sug-1",

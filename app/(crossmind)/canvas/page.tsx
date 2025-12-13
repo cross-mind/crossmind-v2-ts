@@ -21,7 +21,6 @@ import {
   NODE_WIDTH,
   VERTICAL_GAP,
   COLUMN_GAP,
-  MOCK_FEED,
   MOCK_SUGGESTIONS,
   type NodeContent,
   type CanvasNode,
@@ -40,8 +39,8 @@ import { CanvasHeader } from "./components/CanvasHeader";
 import { CanvasArea } from "./components/CanvasArea";
 import { NODE_TYPE_CONFIG } from "./node-type-config";
 import { extractStageFromTags } from "./lib/canvas-helpers";
-import { useCanvasNodes, useCanvasComments } from "@/hooks/use-canvas-nodes";
-import type { CanvasNode as DBCanvasNode, CanvasNodeComment } from "@/lib/db/schema";
+import { useCanvasNodes, useCanvasComments, useCanvasActivities } from "@/hooks/use-canvas-nodes";
+import type { CanvasNode as DBCanvasNode, CanvasNodeComment, CanvasNodeActivity } from "@/lib/db/schema";
 import { NodeDialog } from "./components/NodeDialog";
 import { TagDialog } from "./components/TagDialog";
 import { QuickNodeDialog } from "./components/QuickNodeDialog";
@@ -79,6 +78,36 @@ function mapCommentToUI(comment: CanvasNodeComment, users: Map<string, string>):
     user: comment.authorId ? (users.get(comment.authorId) || comment.authorId.slice(0, 8)) : "Unknown",
     timestamp: formatTimestamp(comment.createdAt),
     content: comment.content,
+  };
+}
+
+/**
+ * Transform database CanvasNodeActivity to UI FeedActivity format
+ * Handles user lookup and timestamp formatting
+ */
+function mapActivityToUI(activity: CanvasNodeActivity, users: Map<string, string>): FeedActivity {
+  const formatTimestamp = (date: Date | string): string => {
+    const dateObj = typeof date === 'string' ? new Date(date) : date;
+    const now = new Date();
+    const diffMs = now.getTime() - dateObj.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return "just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return dateObj.toLocaleDateString();
+  };
+
+  return {
+    id: activity.id,
+    type: activity.type as "created" | "updated" | "status_changed" | "tag_added" | "comment_added",
+    user: activity.userId ? (users.get(activity.userId) || activity.userId.slice(0, 8)) : "System",
+    timestamp: formatTimestamp(activity.createdAt),
+    description: activity.description,
+    details: activity.details || undefined,
   };
 }
 
@@ -161,12 +190,19 @@ export default function CanvasPage() {
   const [selectedNode, setSelectedNode] = useState<CanvasNode | null>(null);
   const [suggestions] = useState<AISuggestion[]>(MOCK_SUGGESTIONS);
   const [stageFilter, setStageFilter] = useState<StageFilterType>("all");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
   // Hook to fetch comments for selected node
   const {
     comments: dbComments,
     isLoading: commentsLoading,
   } = useCanvasComments(selectedNode?.id || null);
+
+  // Hook to fetch activities for selected node
+  const {
+    activities: dbActivities,
+    isLoading: activitiesLoading,
+  } = useCanvasActivities(selectedNode?.id || null);
 
   // Framework switcher state - initialize from database
   const [currentFramework, setCurrentFramework] = useState<ThinkingFramework | null>(null);
@@ -512,10 +548,6 @@ export default function CanvasPage() {
     updateUrl(null); // Clear nodeId and tab from URL
   };
 
-  const getFeedActivities = (nodeId: string): FeedActivity[] => {
-    return MOCK_FEED[nodeId] || [];
-  };
-
   // Build user lookup map (temporary solution)
   const userMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -531,6 +563,13 @@ export default function CanvasPage() {
     if (commentsLoading) return [];
     return (dbComments || []).map(c => mapCommentToUI(c, userMap));
   }, [selectedNode, dbComments, commentsLoading, userMap]);
+
+  // Transform database activities to UI format
+  const getFeedActivities = useCallback((nodeId: string): FeedActivity[] => {
+    if (!selectedNode || selectedNode.id !== nodeId) return [];
+    if (activitiesLoading) return [];
+    return (dbActivities || []).map(a => mapActivityToUI(a, userMap));
+  }, [selectedNode, dbActivities, activitiesLoading, userMap]);
 
   const handleOpenAIChat = (node: CanvasNode) => {
     setSelectedNode(node);
@@ -640,6 +679,87 @@ export default function CanvasPage() {
     }
   };
 
+  // Handle hiding a node in the current framework
+  const handleHideNode = async (node: CanvasNode) => {
+    if (!currentFramework?.id) {
+      console.error("[HideNode] No framework selected");
+      return;
+    }
+
+    try {
+      console.log("[HideNode] Hiding node", {
+        nodeId: node.id,
+        nodeTitle: node.title,
+        frameworkId: currentFramework.id,
+      });
+
+      const hiddenInFrameworks = (node as any).hiddenInFrameworks || {};
+      const newHiddenState = {
+        ...hiddenInFrameworks,
+        [currentFramework.id]: true,
+      };
+
+      await fetch(`/api/canvas/${node.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hiddenInFrameworks: newHiddenState }),
+      });
+
+      console.log("[HideNode] Successfully hidden node");
+
+      // Revalidate to update UI
+      if (projectId) {
+        await mutate();
+      }
+    } catch (error) {
+      console.error("[HideNode] Failed to hide node:", error);
+      alert("隐藏节点失败，请重试");
+    }
+  };
+
+  // Handle restoring a hidden node
+  const handleRestoreNode = async (nodeId: string) => {
+    if (!currentFramework?.id) {
+      console.error("[RestoreNode] No framework selected");
+      return;
+    }
+
+    const node = nodeContents.find((n) => n.id === nodeId);
+    if (!node) {
+      console.error("[RestoreNode] Node not found");
+      return;
+    }
+
+    try {
+      console.log("[RestoreNode] Restoring node", {
+        nodeId,
+        nodeTitle: node.title,
+        frameworkId: currentFramework.id,
+      });
+
+      const hiddenInFrameworks = (node as any).hiddenInFrameworks || {};
+      const newHiddenState = {
+        ...hiddenInFrameworks,
+        [currentFramework.id]: false,
+      };
+
+      await fetch(`/api/canvas/${nodeId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hiddenInFrameworks: newHiddenState }),
+      });
+
+      console.log("[RestoreNode] Successfully restored node");
+
+      // Revalidate to update UI
+      if (projectId) {
+        await mutate();
+      }
+    } catch (error) {
+      console.error("[RestoreNode] Failed to restore node:", error);
+      alert("恢复节点失败，请重试");
+    }
+  };
 
   // Handle framework change
   const handleFrameworkChange = async (framework: ThinkingFramework) => {
@@ -1098,8 +1218,27 @@ export default function CanvasPage() {
 
   // Helper to check if node matches current filter
   const matchesFilter = (node: CanvasNode): boolean => {
-    if (stageFilter === "all") return true;
-    return node.tags.some((tag) => tag === `stage/${stageFilter}`);
+    // 1. Check if hidden in current framework
+    if (currentFramework?.id) {
+      const hiddenInFrameworks = (node as any).hiddenInFrameworks;
+      if (hiddenInFrameworks?.[currentFramework.id] === true) {
+        return false; // Hidden nodes don't match filter
+      }
+    }
+
+    // 2. Check stage filter
+    if (stageFilter !== "all") {
+      const hasStage = node.tags.some((tag) => tag === `stage/${stageFilter}`);
+      if (!hasStage) return false;
+    }
+
+    // 3. Check tag filter (OR logic: match any selected tag)
+    if (selectedTags.length > 0) {
+      const hasAnyTag = node.tags.some((tag) => selectedTags.includes(tag));
+      if (!hasAnyTag) return false;
+    }
+
+    return true;
   };
 
   // Loading state
