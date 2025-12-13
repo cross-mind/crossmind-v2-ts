@@ -14,6 +14,8 @@ interface CanvasHeaderProps {
   nodes: CanvasNode[];
   suggestions: AISuggestion[];
   suggestionsLoading?: boolean;
+  isGenerating?: boolean;
+  elapsedTime?: number;
   onCreateNode: () => void;
   onGenerateSuggestions?: () => void;
 }
@@ -24,6 +26,8 @@ export function CanvasHeader({
   nodes,
   suggestions,
   suggestionsLoading,
+  isGenerating = false,
+  elapsedTime = 0,
   onCreateNode,
   onGenerateSuggestions,
 }: CanvasHeaderProps) {
@@ -63,14 +67,19 @@ export function CanvasHeader({
             size="sm"
             className="h-8 gap-2"
             onClick={onGenerateSuggestions}
-            disabled={suggestionsLoading}
+            disabled={isGenerating || suggestionsLoading}
           >
-            {suggestionsLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
+            {isGenerating ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="text-xs text-muted-foreground">{elapsedTime}s</span>
+              </>
             ) : (
-              <Sparkles className="h-4 w-4" />
+              <>
+                <Sparkles className="h-4 w-4" />
+                重新分析
+              </>
             )}
-            重新分析
           </Button>
         )}
 

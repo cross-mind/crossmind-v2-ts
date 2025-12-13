@@ -136,10 +136,15 @@ export async function POST(request: Request) {
 
     console.log("[Generate Suggestions] AI response length:", text.length);
 
-    // Parse AI response
+    // Parse AI response (strip markdown code blocks if present)
     let suggestionsData;
     try {
-      suggestionsData = JSON.parse(text);
+      // Remove markdown code blocks if present (```json ... ```)
+      let cleanedText = text.trim();
+      if (cleanedText.startsWith("```")) {
+        cleanedText = cleanedText.replace(/^```(?:json)?\s*\n/, "").replace(/\n```\s*$/, "");
+      }
+      suggestionsData = JSON.parse(cleanedText);
     } catch (parseError) {
       console.error("[Generate Suggestions] JSON parse error:", parseError);
       console.error("[Generate Suggestions] Raw text:", text);

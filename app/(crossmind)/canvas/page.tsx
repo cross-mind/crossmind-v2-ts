@@ -229,6 +229,21 @@ export default function CanvasPage() {
     status: "pending", // Only show pending suggestions
   });
 
+  // Track suggestion generation state
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const generationTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (generationTimerRef.current) {
+        clearInterval(generationTimerRef.current);
+        generationTimerRef.current = null;
+      }
+    };
+  }, []);
+
   // Fetch and persist node positions for current framework
   const nodeIds = useMemo(() => nodeContents.map(n => n.id), [nodeContents]);
   const { positions: persistedPositions, savePositions, saveImmediately, isLoading: positionsLoading } = useNodePositions(
@@ -664,30 +679,47 @@ export default function CanvasPage() {
 
       const result = await response.json();
 
+      // Refresh data first for all types
+      const [updatedNodes] = await Promise.all([
+        mutate(),
+        mutateSuggestions(),
+      ]);
+
       // Handle content-suggestion type - open AI Chat with pre-filled prompt
       if (result.type === "content-suggestion" && result.result?.changes) {
         const { nodeId, prefilledPrompt } = result.result.changes;
 
-        // Find and select the target node
-        const targetNode = nodes.find(n => n.id === nodeId);
+        // Find and select the target node from refreshed data
+        const targetNode = (updatedNodes || nodeContents).find((n: { id: string }) => n.id === nodeId);
         if (targetNode) {
-          setSelectedNode(targetNode);
-          setShowAIChat(true);
-          setPendingAIChatPrompt({
-            nodeId,
-            prompt: prefilledPrompt,
-          });
-          updateUrl(nodeId, "ai-chat");
+          const fullNode = nodes.find(n => n.id === nodeId);
+          if (fullNode) {
+            setSelectedNode(fullNode);
+            setShowAIChat(true);
+            setPendingAIChatPrompt({
+              nodeId,
+              prompt: prefilledPrompt,
+            });
+            updateUrl(nodeId, "ai-chat");
+          }
         }
       } else {
-        // For other types, refresh nodes and suggestions
-        await mutate();
-        await mutateSuggestions();
+        // For other types (add-tag, add-node, etc.)
+        // If the current selected node was affected, refresh its data
+        if (selectedNode && result.result?.affectedNodeId === selectedNode.id) {
+          const updatedNode = (updatedNodes || nodeContents).find((n: { id: string }) => n.id === selectedNode.id);
+          if (updatedNode) {
+            const fullNode = nodes.find(n => n.id === selectedNode.id);
+            if (fullNode) {
+              setSelectedNode(fullNode);
+            }
+          }
+        }
       }
     } catch (error) {
       console.error("[Canvas] Failed to apply suggestion:", error);
     }
-  }, [nodes, mutate, mutateSuggestions, updateUrl]);
+  }, [nodes, nodeContents, selectedNode, mutate, mutateSuggestions, updateUrl]);
 
   const handleDismissSuggestion = useCallback(async (suggestionId: string) => {
     try {
@@ -707,9 +739,31 @@ export default function CanvasPage() {
   }, [mutateSuggestions]);
 
   const handleGenerateSuggestions = useCallback(async () => {
-    if (!projectId || !currentFramework) return;
+    if (!projectId || !currentFramework || isGenerating) return;
+
+    setIsGenerating(true);
+    setElapsedTime(0);
+
+    // Start timer
+    const startTime = Date.now();
+    generationTimerRef.current = setInterval(() => {
+      setElapsedTime(Math.floor((Date.now() - startTime) / 1000));
+    }, 1000);
+
+    // Set timeout (60 seconds)
+    const timeoutId = setTimeout(() => {
+      if (generationTimerRef.current) {
+        clearInterval(generationTimerRef.current);
+        generationTimerRef.current = null;
+      }
+      setIsGenerating(false);
+      console.error("[Canvas] Suggestion generation timed out after 60 seconds");
+    }, 60000);
 
     try {
+      const controller = new AbortController();
+      const fetchTimeout = setTimeout(() => controller.abort(), 60000);
+
       const response = await fetch("/api/canvas/suggestions/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -717,7 +771,11 @@ export default function CanvasPage() {
           projectId,
           frameworkId: currentFramework.id,
         }),
+        signal: controller.signal,
       });
+
+      clearTimeout(fetchTimeout);
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new Error("Failed to generate suggestions");
@@ -727,8 +785,15 @@ export default function CanvasPage() {
       await mutateSuggestions();
     } catch (error) {
       console.error("[Canvas] Failed to generate suggestions:", error);
+      clearTimeout(timeoutId);
+    } finally {
+      if (generationTimerRef.current) {
+        clearInterval(generationTimerRef.current);
+        generationTimerRef.current = null;
+      }
+      setIsGenerating(false);
     }
-  }, [projectId, currentFramework, mutateSuggestions]);
+  }, [projectId, currentFramework, mutateSuggestions, isGenerating]);
 
   // Restore selected node from URL on initial load and sync with URL changes
   useEffect(() => {
@@ -1496,6 +1561,8 @@ export default function CanvasPage() {
         nodes={nodes}
         suggestions={dbSuggestions}
         suggestionsLoading={suggestionsLoading}
+        isGenerating={isGenerating}
+        elapsedTime={elapsedTime}
         onCreateNode={() => setNodeDialogOpen(true)}
         onGenerateSuggestions={handleGenerateSuggestions}
       />
