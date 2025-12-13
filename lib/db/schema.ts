@@ -252,6 +252,9 @@ export const canvasNode = pgTable(
     // Zone affinities (framework-to-zone weights for smart placement)
     zoneAffinities: jsonb("zoneAffinities"),
 
+    // Hidden state per framework (framework-specific visibility)
+    hiddenInFrameworks: jsonb("hiddenInFrameworks").$type<Record<string, boolean>>(),
+
     // Tags
     tags: text("tags").array(),
 
@@ -334,16 +337,75 @@ export const canvasSuggestion = pgTable("CanvasSuggestion", {
     .notNull()
     .references(() => project.id, { onDelete: "cascade" }),
 
+  // Framework association - suggestions are framework-specific
+  frameworkId: uuid("frameworkId").references(() => framework.id, {
+    onDelete: "set null",
+  }),
+
+  // Suggestion type - includes conversational content-suggestion
   type: varchar("type", {
-    enum: ["add-node", "add-tag", "refine-content", "health-issue"],
+    enum: [
+      "add-node",
+      "add-tag",
+      "refine-content",
+      "content-suggestion",
+      "health-issue",
+    ],
   }).notNull(),
+
+  // Core fields
   title: text("title").notNull(),
   description: text("description").notNull(),
-  nodeId: uuid("nodeId").references(() => canvasNode.id, { onDelete: "set null" }),
+  reason: text("reason"), // Why this suggestion is recommended
+  nodeId: uuid("nodeId").references(() => canvasNode.id, {
+    onDelete: "set null",
+  }),
 
+  // Priority and impact
+  priority: varchar("priority", {
+    enum: ["low", "medium", "high", "critical"],
+  })
+    .notNull()
+    .default("medium"),
+  impactScore: real("impactScore"), // Estimated improvement score (0-100)
+
+  // Action parameters (type-specific JSONB)
+  actionParams: jsonb("actionParams").$type<{
+    // add-tag
+    tags?: string[];
+
+    // add-node
+    newNode?: {
+      title: string;
+      content: string;
+      type?: string;
+      tags?: string[];
+      zone?: string;
+    };
+
+    // refine-content
+    refinedContent?: string;
+
+    // content-suggestion (conversational optimization)
+    suggestionPoints?: string[]; // List of optimization points
+    promptTemplate?: string; // Optional custom prompt template
+  }>(),
+
+  // Lifecycle tracking
   status: varchar("status", { enum: ["pending", "accepted", "dismissed"] })
     .notNull()
     .default("pending"),
+  source: varchar("source", {
+    enum: ["ai-health-check", "manual"],
+  })
+    .notNull()
+    .default("ai-health-check"),
+
+  appliedAt: timestamp("appliedAt"),
+  appliedById: uuid("appliedById").references(() => user.id),
+  dismissedAt: timestamp("dismissedAt"),
+  dismissedById: uuid("dismissedById").references(() => user.id),
+
   createdAt: timestamp("createdAt").notNull(),
 });
 

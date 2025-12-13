@@ -671,6 +671,7 @@ export async function updateCanvasNode({
   displayOrder,
   parentId,
   zoneAffinities,
+  hiddenInFrameworks,
   taskStatus,
   assigneeId,
   dueDate,
@@ -686,6 +687,7 @@ export async function updateCanvasNode({
   displayOrder?: number;
   parentId?: string | null;
   zoneAffinities?: Record<string, Record<string, number>>;
+  hiddenInFrameworks?: Record<string, boolean>;
   taskStatus?: "todo" | "in-progress" | "done";
   assigneeId?: string;
   dueDate?: Date;
@@ -712,6 +714,7 @@ export async function updateCanvasNode({
         ...(displayOrder !== undefined && { displayOrder }),
         ...(parentId !== undefined && { parentId }),
         ...(zoneAffinities !== undefined && { zoneAffinities }),
+        ...(hiddenInFrameworks !== undefined && { hiddenInFrameworks }),
         ...(taskStatus !== undefined && { taskStatus }),
         ...(assigneeId !== undefined && { assigneeId }),
         ...(dueDate !== undefined && { dueDate }),
@@ -849,6 +852,180 @@ export async function createCanvasComment({
     return newComment;
   } catch (_error) {
     throw new ChatSDKError("bad_request:database", "Failed to create comment");
+  }
+}
+
+// ========== Canvas Suggestions ==========
+
+export async function getCanvasSuggestionsByFramework({
+  projectId,
+  frameworkId,
+  status,
+}: {
+  projectId: string;
+  frameworkId: string;
+  status?: "pending" | "accepted" | "dismissed";
+}) {
+  try {
+    const conditions = [
+      eq(canvasSuggestion.projectId, projectId),
+      eq(canvasSuggestion.frameworkId, frameworkId),
+    ];
+
+    if (status) {
+      conditions.push(eq(canvasSuggestion.status, status));
+    }
+
+    return await db
+      .select()
+      .from(canvasSuggestion)
+      .where(and(...conditions))
+      .orderBy(
+        desc(canvasSuggestion.priority),
+        desc(canvasSuggestion.impactScore),
+        desc(canvasSuggestion.createdAt),
+      );
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to get canvas suggestions");
+  }
+}
+
+export async function getCanvasSuggestionsByNode({
+  nodeId,
+  status,
+}: {
+  nodeId: string;
+  status?: "pending" | "accepted" | "dismissed";
+}) {
+  try {
+    const conditions = [eq(canvasSuggestion.nodeId, nodeId)];
+
+    if (status) {
+      conditions.push(eq(canvasSuggestion.status, status));
+    }
+
+    return await db
+      .select()
+      .from(canvasSuggestion)
+      .where(and(...conditions))
+      .orderBy(
+        desc(canvasSuggestion.priority),
+        desc(canvasSuggestion.impactScore),
+        desc(canvasSuggestion.createdAt),
+      );
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to get node suggestions");
+  }
+}
+
+export async function getCanvasSuggestionById({ id }: { id: string }) {
+  try {
+    const [suggestion] = await db
+      .select()
+      .from(canvasSuggestion)
+      .where(eq(canvasSuggestion.id, id));
+    return suggestion;
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to get suggestion");
+  }
+}
+
+export async function createCanvasSuggestion({
+  projectId,
+  frameworkId,
+  nodeId,
+  type,
+  title,
+  description,
+  reason,
+  priority,
+  impactScore,
+  actionParams,
+  source,
+}: {
+  projectId: string;
+  frameworkId?: string;
+  nodeId?: string;
+  type: "add-node" | "add-tag" | "refine-content" | "content-suggestion" | "health-issue";
+  title: string;
+  description: string;
+  reason?: string;
+  priority?: "low" | "medium" | "high" | "critical";
+  impactScore?: number;
+  actionParams?: any;
+  source?: "ai-health-check" | "manual";
+}) {
+  try {
+    const [newSuggestion] = await db
+      .insert(canvasSuggestion)
+      .values({
+        projectId,
+        frameworkId,
+        nodeId,
+        type,
+        title,
+        description,
+        reason,
+        priority: priority || "medium",
+        impactScore,
+        actionParams,
+        source: source || "ai-health-check",
+        status: "pending",
+        createdAt: new Date(),
+      })
+      .returning();
+
+    return newSuggestion;
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to create suggestion");
+  }
+}
+
+export async function updateCanvasSuggestion({
+  id,
+  status,
+  appliedAt,
+  appliedById,
+  dismissedAt,
+  dismissedById,
+}: {
+  id: string;
+  status?: "pending" | "accepted" | "dismissed";
+  appliedAt?: Date;
+  appliedById?: string;
+  dismissedAt?: Date;
+  dismissedById?: string;
+}) {
+  try {
+    const updateData: any = {};
+
+    if (status) updateData.status = status;
+    if (appliedAt) updateData.appliedAt = appliedAt;
+    if (appliedById) updateData.appliedById = appliedById;
+    if (dismissedAt) updateData.dismissedAt = dismissedAt;
+    if (dismissedById) updateData.dismissedById = dismissedById;
+
+    const [updated] = await db
+      .update(canvasSuggestion)
+      .set(updateData)
+      .where(eq(canvasSuggestion.id, id))
+      .returning();
+
+    return updated;
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to update suggestion");
+  }
+}
+
+export async function deleteCanvasSuggestion({ id }: { id: string }) {
+  try {
+    const [deleted] = await db
+      .delete(canvasSuggestion)
+      .where(eq(canvasSuggestion.id, id))
+      .returning();
+    return deleted;
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to delete suggestion");
   }
 }
 

@@ -5,6 +5,8 @@ import { StrategicZones } from "./StrategicZones";
 import { CanvasNodeCard } from "./CanvasNodeCard";
 import { CanvasControls } from "./CanvasControls";
 import { StageFilter, type StageFilterType } from "./StageFilter";
+import { TagFilter } from "./TagFilter";
+import { HiddenNodesDropdown } from "./HiddenNodesDropdown";
 import { CanvasBackgroundContextMenu } from "./CanvasBackgroundContextMenu";
 import type { CanvasNode, ThinkingFramework } from "../canvas-data";
 import type { NODE_TYPE_CONFIG } from "../node-type-config";
@@ -34,10 +36,14 @@ interface CanvasAreaProps {
   onAddChild: (parentNode: CanvasNode) => void;
   onDelete: (node: CanvasNode) => void;
   onMoveToZone?: (node: CanvasNode, zoneKey: string) => void;
+  onHideNode?: (node: CanvasNode) => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onReset: () => void;
   onFilterChange: (filter: StageFilterType) => void;
+  selectedTags: string[];
+  onTagsChange: (tags: string[]) => void;
+  onRestoreNode: (nodeId: string) => void;
   onSelectedNodeChange: (node: CanvasNode | null) => void;
   onWheel?: (e: WheelEvent) => void; // Optional wheel handler from useZoomPan
   onMouseMove?: (e: MouseEvent) => void; // Optional mouse move handler
@@ -73,10 +79,14 @@ export function CanvasArea({
   onAddChild,
   onDelete,
   onMoveToZone,
+  onHideNode,
   onZoomIn,
   onZoomOut,
   onReset,
   onFilterChange,
+  selectedTags,
+  onTagsChange,
+  onRestoreNode,
   onSelectedNodeChange,
   onWheel,
   onMouseMove,
@@ -188,6 +198,7 @@ export function CanvasArea({
               onAddChild={onAddChild}
               onDelete={onDelete}
               onMoveToZone={onMoveToZone}
+              onHideNode={onHideNode}
               onNodeRefSet={(id, el) => {
                 if (el) {
                   nodeRefs.current.set(id, el);
@@ -213,11 +224,27 @@ export function CanvasArea({
         totalNodeCount={visibleNodes.length}
       />
 
-      {/* Stage Filter - Top Left */}
-      <StageFilter
-        currentFilter={stageFilter}
-        onFilterChange={onFilterChange}
-      />
+      {/* Filter Bar - Top Left */}
+      <div className="absolute top-4 left-4 flex items-center gap-2">
+        {/* Stage Filter */}
+        <div className="bg-background/90 backdrop-blur border border-border rounded-lg shadow-lg">
+          <StageFilter currentFilter={stageFilter} onFilterChange={onFilterChange} />
+        </div>
+
+        {/* Tag Filter */}
+        <div className="bg-background/90 backdrop-blur border border-border rounded-lg shadow-lg">
+          <TagFilter nodes={visibleNodes} selectedTags={selectedTags} onTagsChange={onTagsChange} />
+        </div>
+
+        {/* Hidden Nodes Dropdown */}
+        <div className="bg-background/90 backdrop-blur border border-border rounded-lg shadow-lg">
+          <HiddenNodesDropdown
+            nodes={visibleNodes}
+            currentFrameworkId={currentFramework?.id || null}
+            onRestoreNode={onRestoreNode}
+          />
+        </div>
+      </div>
     </div>
   );
 }

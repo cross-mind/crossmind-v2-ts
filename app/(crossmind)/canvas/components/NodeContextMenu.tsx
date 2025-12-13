@@ -10,7 +10,7 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { Sparkles, Plus, Trash2, MoveRight } from "lucide-react";
+import { Sparkles, Plus, Trash2, MoveRight, EyeOff } from "lucide-react";
 import type { CanvasNode, ThinkingFramework } from "../canvas-data";
 
 interface NodeContextMenuProps {
@@ -21,6 +21,7 @@ interface NodeContextMenuProps {
   onAddChild: (node: CanvasNode) => void;
   onDelete: (node: CanvasNode) => void;
   onMoveToZone?: (node: CanvasNode, zoneKey: string) => void;
+  onHideNode?: (node: CanvasNode) => void;
 }
 
 export function NodeContextMenu({
@@ -31,6 +32,7 @@ export function NodeContextMenu({
   onAddChild,
   onDelete,
   onMoveToZone,
+  onHideNode,
 }: NodeContextMenuProps) {
   return (
     <ContextMenu>
@@ -79,6 +81,19 @@ export function NodeContextMenu({
               </ContextMenuSubContent>
             </ContextMenuSub>
           </>
+        )}
+
+        {/* Hide in Framework */}
+        {currentFramework && onHideNode && (
+          <ContextMenuItem
+            onClick={(e) => {
+              e.stopPropagation();
+              onHideNode(node);
+            }}
+          >
+            <EyeOff className="mr-2 h-4 w-4" />
+            <span>Hide in this Framework</span>
+          </ContextMenuItem>
         )}
 
         <ContextMenuSeparator />

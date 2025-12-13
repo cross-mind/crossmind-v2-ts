@@ -699,11 +699,17 @@ export default function CanvasPage() {
         [currentFramework.id]: true,
       };
 
-      await fetch(`/api/canvas/${node.id}`, {
+      const response = await fetch(`/api/canvas/${node.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ hiddenInFrameworks: newHiddenState }),
       });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("[HideNode] API error:", errorData);
+        throw new Error(`API returned ${response.status}: ${JSON.stringify(errorData)}`);
+      }
 
       console.log("[HideNode] Successfully hidden node");
 
@@ -743,11 +749,17 @@ export default function CanvasPage() {
         [currentFramework.id]: false,
       };
 
-      await fetch(`/api/canvas/${nodeId}`, {
+      const response = await fetch(`/api/canvas/${nodeId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ hiddenInFrameworks: newHiddenState }),
       });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error("[RestoreNode] API error:", errorData);
+        throw new Error(`API returned ${response.status}: ${JSON.stringify(errorData)}`);
+      }
 
       console.log("[RestoreNode] Successfully restored node");
 
@@ -1350,10 +1362,14 @@ export default function CanvasPage() {
           onAddChild={handleAddChild}
           onDelete={handleDelete}
           onMoveToZone={handleMoveToZone}
+          onHideNode={handleHideNode}
           onZoomIn={handleZoomIn}
           onZoomOut={handleZoomOut}
           onReset={handleZoomReset}
           onFilterChange={setStageFilter}
+          selectedTags={selectedTags}
+          onTagsChange={setSelectedTags}
+          onRestoreNode={handleRestoreNode}
           onSelectedNodeChange={setSelectedNode}
           onWheel={handleWheel}
           onMouseMove={handleMouseMove}

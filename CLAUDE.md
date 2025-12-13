@@ -39,6 +39,33 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This ensures knowledge accumulation and prevents repeated mistakes.
 
+## Test User Credentials
+
+**IMPORTANT**: Use these fixed test credentials for ALL development and testing to avoid permission issues.
+
+### Test Account
+```
+Email:       test@crossmind.dev
+Password:    test123456
+User ID:     cdfbc0e9-e288-478c-87e5-f7057591e5a1
+Project ID:  6f41921c-8970-4faa-a6c0-7180af8384ee
+Tier:        pro (500 health checks/month)
+```
+
+### Setup Script
+If the test user needs to be recreated or a new environment setup:
+```bash
+npx tsx scripts/setup-test-user.ts
+```
+
+### Usage
+- **Browser Testing**: Log in with test@crossmind.dev / test123456
+- **API Testing**: Use User ID in session/auth headers
+- **Database Testing**: Query with Project ID for project-specific data
+- **Chrome DevTools MCP**: Always log in as test user before testing features
+
+**Note**: This is a pro-tier account with full access to all features for comprehensive testing.
+
 ## Development Commands
 
 ### Core Development

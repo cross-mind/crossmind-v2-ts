@@ -33,8 +33,7 @@ export function StageFilter({ currentFilter, onFilterChange }: StageFilterProps)
     : "All Stages";
 
   return (
-    <div className="absolute top-4 left-4 bg-background/90 backdrop-blur border border-border rounded-lg shadow-lg">
-      <DropdownMenu>
+    <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="sm" className="h-9 px-3">
             <Tag className="h-3.5 w-3.5 mr-1.5" />
@@ -58,7 +57,6 @@ export function StageFilter({ currentFilter, onFilterChange }: StageFilterProps)
           </div>
         </DropdownMenuContent>
       </DropdownMenu>
-    </div>
   );
 }
 

@@ -51,6 +51,8 @@ const updateNodeSchema = z.object({
   displayOrder: z.number().optional(),
   parentId: z.string().uuid().nullable().optional(),
   zoneAffinities: z.record(z.record(z.number())).optional(),
+  // Framework-specific visibility
+  hiddenInFrameworks: z.record(z.boolean()).optional(),
   // Task fields
   taskStatus: z.enum(["todo", "in-progress", "done"]).optional(),
   assigneeId: z.string().uuid().optional(),
@@ -80,6 +82,7 @@ export async function PATCH(
     // if (!hasAccess) return new ChatSDKError("forbidden:api").toResponse();
 
     const body = await request.json();
+    console.log("[Canvas PATCH] Request body:", JSON.stringify(body, null, 2));
     const data = updateNodeSchema.parse(body);
 
     const updated = await updateCanvasNode({
@@ -91,6 +94,7 @@ export async function PATCH(
     return NextResponse.json({ node: updated }, { status: 200 });
   } catch (error) {
     if (error instanceof z.ZodError) {
+      console.error("[Canvas PATCH] Zod validation error:", error.errors);
       return new ChatSDKError("bad_request:api", error.message).toResponse();
     }
     if (error instanceof ChatSDKError) {

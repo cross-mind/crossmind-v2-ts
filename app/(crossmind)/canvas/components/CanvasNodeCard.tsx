@@ -28,6 +28,7 @@ function ChildNodeCard({
   onAddChild,
   onDelete,
   onMoveToZone,
+  onHideNode,
   overNodeId,
   dropPosition,
 }: {
@@ -40,6 +41,7 @@ function ChildNodeCard({
   onAddChild: (node: CanvasNode) => void;
   onDelete: (node: CanvasNode) => void;
   onMoveToZone?: (node: CanvasNode, zoneKey: string) => void;
+  onHideNode?: (node: CanvasNode) => void;
   overNodeId?: string | null;
   dropPosition?: "top" | "bottom" | "center" | null;
 }) {
@@ -76,6 +78,7 @@ function ChildNodeCard({
         onAddChild={onAddChild}
         onDelete={onDelete}
         onMoveToZone={onMoveToZone}
+        onHideNode={onHideNode}
       >
         <div
           ref={setRefs}
@@ -125,6 +128,7 @@ interface CanvasNodeCardProps {
   onAddChild: (node: CanvasNode) => void;
   onDelete: (node: CanvasNode) => void;
   onMoveToZone?: (node: CanvasNode, zoneKey: string) => void;
+  onHideNode?: (node: CanvasNode) => void;
   onNodeRefSet: (id: string, el: HTMLDivElement | null) => void;
   matchesFilter: (node: CanvasNode) => boolean;
   stageFilter: string;
@@ -144,6 +148,7 @@ export function CanvasNodeCard({
   onAddChild,
   onDelete,
   onMoveToZone,
+  onHideNode,
   onNodeRefSet,
   matchesFilter,
   stageFilter,
@@ -210,6 +215,7 @@ export function CanvasNodeCard({
                 onAddChild={onAddChild}
                 onDelete={onDelete}
                 onMoveToZone={onMoveToZone}
+                onHideNode={onHideNode}
                 overNodeId={overNodeId}
                 dropPosition={dropPosition}
               />
@@ -232,6 +238,7 @@ export function CanvasNodeCard({
         onAddChild={onAddChild}
         onDelete={onDelete}
         onMoveToZone={onMoveToZone}
+        onHideNode={onHideNode}
       >
         <div
           ref={setCardRef}

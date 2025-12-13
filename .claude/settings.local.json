@@ -14,7 +14,10 @@
       "Bash(pnpm db:generate:*)",
       "Bash(psql:*)",
       "Bash(curl:*)",
-      "Bash(pnpm build:*)"
+      "Bash(pnpm build:*)",
+      "Bash(lsof:*)",
+      "Bash(pnpm db:migrate:*)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []
