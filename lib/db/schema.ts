@@ -2,6 +2,7 @@ import type { InferSelectModel } from "drizzle-orm";
 import {
   boolean,
   foreignKey,
+  index,
   json,
   jsonb,
   pgTable,
@@ -9,6 +10,7 @@ import {
   real,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
   varchar,
 } from "drizzle-orm/pg-core";
@@ -191,6 +193,10 @@ export const project = pgTable("Project", {
     .notNull()
     .references(() => user.id),
   workspaceContainerId: text("workspaceContainerId"),
+
+  // Framework preference (added for framework independence)
+  defaultFrameworkId: uuid("defaultFrameworkId"),
+
   createdAt: timestamp("createdAt").notNull(),
   updatedAt: timestamp("updatedAt").notNull(),
 });
@@ -539,3 +545,124 @@ export const chatSession = pgTable("ChatSession", {
 });
 
 export type ChatSession = InferSelectModel<typeof chatSession>;
+
+// ========== Framework System ==========
+
+// Framework table (platform-shared and user-custom frameworks)
+export const framework = pgTable(
+  "Framework",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    name: text("name").notNull(),
+    icon: text("icon").notNull(),
+    description: text("description").notNull(),
+
+    // Multi-tenancy: NULL = platform-shared
+    ownerId: uuid("ownerId").references(() => user.id, { onDelete: "cascade" }),
+
+    visibility: varchar("visibility", { enum: ["public", "private"] })
+      .notNull()
+      .default("private"),
+    isActive: boolean("isActive").notNull().default(true),
+
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => ({
+    ownerIdx: index("idx_framework_owner").on(table.ownerId, table.isActive),
+  })
+);
+
+export type Framework = InferSelectModel<typeof framework>;
+
+// FrameworkZone table (normalized zones belonging to frameworks)
+export const frameworkZone = pgTable(
+  "FrameworkZone",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    frameworkId: uuid("frameworkId")
+      .notNull()
+      .references(() => framework.id, { onDelete: "cascade" }),
+
+    zoneKey: text("zoneKey").notNull(), // Stable identifier (e.g., "ideation")
+    name: text("name").notNull(), // Display name (e.g., "想法孵化")
+    description: text("description"),
+    colorKey: text("colorKey").notNull(), // References ZONE_COLORS constant
+
+    displayOrder: real("displayOrder").notNull().default(0), // Left-to-right order
+
+    createdAt: timestamp("createdAt").notNull(),
+  },
+  (table) => ({
+    uniqueZone: uniqueIndex("idx_framework_zone_unique").on(
+      table.frameworkId,
+      table.zoneKey
+    ),
+    orderIdx: index("idx_framework_zone_order").on(
+      table.frameworkId,
+      table.displayOrder
+    ),
+  })
+);
+
+export type FrameworkZone = InferSelectModel<typeof frameworkZone>;
+
+// CanvasNodeZoneAffinity table (normalized node-zone relationships)
+export const canvasNodeZoneAffinity = pgTable(
+  "CanvasNodeZoneAffinity",
+  {
+    nodeId: uuid("nodeId")
+      .notNull()
+      .references(() => canvasNode.id, { onDelete: "cascade" }),
+    frameworkId: uuid("frameworkId")
+      .notNull()
+      .references(() => framework.id, { onDelete: "cascade" }),
+    zoneId: uuid("zoneId")
+      .notNull()
+      .references(() => frameworkZone.id, { onDelete: "cascade" }),
+
+    affinityWeight: real("affinityWeight").notNull(), // 1-10 scale
+
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.nodeId, table.frameworkId, table.zoneId] }),
+    lookupIdx: index("idx_affinity_lookup").on(
+      table.nodeId,
+      table.frameworkId,
+      table.affinityWeight
+    ),
+    zoneNodesIdx: index("idx_zone_nodes").on(
+      table.frameworkId,
+      table.zoneId,
+      table.affinityWeight
+    ),
+  })
+);
+
+export type CanvasNodeZoneAffinity = InferSelectModel<typeof canvasNodeZoneAffinity>;
+
+// CanvasNodePosition table (stores node positions per framework)
+export const canvasNodePosition = pgTable(
+  "CanvasNodePosition",
+  {
+    nodeId: uuid("nodeId")
+      .notNull()
+      .references(() => canvasNode.id, { onDelete: "cascade" }),
+    frameworkId: uuid("frameworkId")
+      .notNull()
+      .references(() => framework.id, { onDelete: "cascade" }),
+
+    x: real("x").notNull(),
+    y: real("y").notNull(),
+
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => ({
+    pk: primaryKey({ columns: [table.nodeId, table.frameworkId] }),
+    frameworkIdx: index("idx_node_position_framework").on(table.frameworkId),
+  })
+);
+
+export type CanvasNodePosition = InferSelectModel<typeof canvasNodePosition>;

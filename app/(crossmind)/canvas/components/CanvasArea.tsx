@@ -5,6 +5,7 @@ import { StrategicZones } from "./StrategicZones";
 import { CanvasNodeCard } from "./CanvasNodeCard";
 import { CanvasControls } from "./CanvasControls";
 import { StageFilter, type StageFilterType } from "./StageFilter";
+import { CanvasBackgroundContextMenu } from "./CanvasBackgroundContextMenu";
 import type { CanvasNode, ThinkingFramework } from "../canvas-data";
 import type { NODE_TYPE_CONFIG } from "../node-type-config";
 import type { DropPosition } from "../lib/drag-drop-helpers";
@@ -18,7 +19,7 @@ interface CanvasAreaProps {
   scale: number;
   showStrategicZones: boolean;
   layoutCalculated: boolean;
-  currentFramework: ThinkingFramework;
+  currentFramework: ThinkingFramework | null;
   zoneBounds: Record<string, { width: number; height: number }>;
   getDynamicZoneConfigs: () => Record<string, { startX: number; startY: number; columnCount: number; nodeIds: string[] }>;
   visibleNodes: CanvasNode[];
@@ -32,6 +33,7 @@ interface CanvasAreaProps {
   onOpenAIChat: (node: CanvasNode) => void;
   onAddChild: (parentNode: CanvasNode) => void;
   onDelete: (node: CanvasNode) => void;
+  onMoveToZone?: (node: CanvasNode, zoneKey: string) => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onReset: () => void;
@@ -40,6 +42,7 @@ interface CanvasAreaProps {
   onWheel?: (e: WheelEvent) => void; // Optional wheel handler from useZoomPan
   onMouseMove?: (e: MouseEvent) => void; // Optional mouse move handler
   onMouseUp?: () => void; // Optional mouse up handler
+  onBackgroundContextMenu?: (x: number, y: number) => void; // Optional background context menu handler
   // Drag-drop state
   activeNodeId?: string | null;
   overNodeId?: string | null;
@@ -69,6 +72,7 @@ export function CanvasArea({
   onOpenAIChat,
   onAddChild,
   onDelete,
+  onMoveToZone,
   onZoomIn,
   onZoomOut,
   onReset,
@@ -77,6 +81,7 @@ export function CanvasArea({
   onWheel,
   onMouseMove,
   onMouseUp,
+  onBackgroundContextMenu,
   activeNodeId,
   overNodeId,
   dropPosition,
@@ -138,54 +143,65 @@ export function CanvasArea({
       />
 
       {/* Unified transform container for zones and nodes */}
-      <div
-        ref={transformRef}
-        className="absolute inset-0"
-        style={{
-          transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px) scale(${scale})`,
-          transformOrigin: "0 0",
-          willChange: "transform",
-        }}
+      <CanvasBackgroundContextMenu
+        onCreateNode={onBackgroundContextMenu || (() => {})}
+        transformRef={transformRef}
+        zoom={scale}
+        panX={canvasOffset.x}
+        panY={canvasOffset.y}
       >
-        {/* Strategic Zones Background - offset and scale handled by parent container */}
-        <div ref={zonesContainerRef}>
-          <StrategicZones
-            showStrategicZones={showStrategicZones}
-            canvasOffset={{ x: 0, y: 0 }}
-            scale={1}
-            layoutCalculated={layoutCalculated}
-            currentFramework={currentFramework}
-            zoneBounds={zoneBounds}
-            getDynamicZoneConfigs={getDynamicZoneConfigs}
-          />
-        </div>
+        <div
+          ref={transformRef}
+          className="absolute inset-0"
+          style={{
+            transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px) scale(${scale})`,
+            transformOrigin: "0 0",
+            willChange: "transform",
+          }}
+        >
+          {/* Strategic Zones Background - offset and scale handled by parent container */}
+          <div ref={zonesContainerRef} className="absolute inset-0 z-0">
+            <StrategicZones
+              showStrategicZones={showStrategicZones}
+              canvasOffset={{ x: 0, y: 0 }}
+              scale={1}
+              layoutCalculated={layoutCalculated}
+              currentFramework={currentFramework}
+              zoneBounds={zoneBounds}
+              getDynamicZoneConfigs={getDynamicZoneConfigs}
+              overNodeId={overNodeId || null}
+            />
+          </div>
 
-        {/* Nodes */}
-        <div ref={nodesContainerRef} className="absolute inset-0">
-        {visibleNodes.filter((node) => !node.parentId).map((node) => (
-          <CanvasNodeCard
-            key={node.id}
-            node={node}
-            visibleNodes={visibleNodes}
-            selectedNodeId={selectedNode?.id || null}
-            nodeTypeConfig={nodeTypeConfig}
-            onNodeClick={onNodeClick}
-            onOpenAIChat={onOpenAIChat}
-            onAddChild={onAddChild}
-            onDelete={onDelete}
-            onNodeRefSet={(id, el) => {
-              if (el) {
-                nodeRefs.current.set(id, el);
-              }
-            }}
-            matchesFilter={matchesFilter}
-            stageFilter={stageFilter}
-            overNodeId={overNodeId}
-            dropPosition={dropPosition}
-          />
-        ))}
+          {/* Nodes */}
+          <div ref={nodesContainerRef} className="absolute inset-0 z-10">
+          {visibleNodes.filter((node) => !node.parentId).map((node) => (
+            <CanvasNodeCard
+              key={node.id}
+              node={node}
+              visibleNodes={visibleNodes}
+              selectedNodeId={selectedNode?.id || null}
+              nodeTypeConfig={nodeTypeConfig}
+              currentFramework={currentFramework}
+              onNodeClick={onNodeClick}
+              onOpenAIChat={onOpenAIChat}
+              onAddChild={onAddChild}
+              onDelete={onDelete}
+              onMoveToZone={onMoveToZone}
+              onNodeRefSet={(id, el) => {
+                if (el) {
+                  nodeRefs.current.set(id, el);
+                }
+              }}
+              matchesFilter={matchesFilter}
+              stageFilter={stageFilter}
+              overNodeId={overNodeId}
+              dropPosition={dropPosition}
+            />
+          ))}
+          </div>
         </div>
-      </div>
+      </CanvasBackgroundContextMenu>
 
       {/* Canvas Controls */}
       <CanvasControls

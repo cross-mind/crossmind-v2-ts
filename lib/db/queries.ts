@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, count, desc, eq, gt, gte, inArray, lt, type SQL } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, gte, inArray, isNull, lt, or, type SQL } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import type { ArtifactKind } from "@/components/artifact";
@@ -26,11 +26,19 @@ import {
   type CanvasNodeActivity,
   canvasNodeComment,
   type CanvasNodeComment,
+  canvasNodeZoneAffinity,
+  type CanvasNodeZoneAffinity,
+  canvasNodePosition,
+  type CanvasNodePosition,
   canvasSuggestion,
   project,
   type Project,
   membership,
   type Membership,
+  framework,
+  type Framework,
+  frameworkZone,
+  type FrameworkZone,
 } from "./schema";
 import { generateHashedPassword } from "./utils";
 
@@ -542,6 +550,7 @@ export async function createCanvasNode({
   tags,
   positions,
   zoneAffinities,
+  displayOrder,
   taskStatus,
   assigneeId,
   dueDate,
@@ -557,6 +566,7 @@ export async function createCanvasNode({
   tags?: string[];
   positions?: Record<string, { x: number; y: number }>;
   zoneAffinities?: Record<string, Record<string, number>>;
+  displayOrder?: number;
   taskStatus?: "todo" | "in-progress" | "done";
   assigneeId?: string;
   dueDate?: Date;
@@ -576,6 +586,7 @@ export async function createCanvasNode({
         tags,
         positions,
         zoneAffinities,
+        displayOrder: displayOrder ?? 0,
         taskStatus,
         assigneeId,
         dueDate,
@@ -596,6 +607,36 @@ export async function createCanvasNode({
       description: "created this node",
       createdAt: new Date(),
     });
+
+    // If zoneAffinities provided, also write to CanvasNodeZoneAffinity table
+    if (zoneAffinities && Object.keys(zoneAffinities).length > 0) {
+      for (const [frameworkId, zones] of Object.entries(zoneAffinities)) {
+        for (const [zoneKey, weight] of Object.entries(zones)) {
+          // Find the zone ID by zoneKey
+          const [zone] = await db
+            .select({ id: frameworkZone.id })
+            .from(frameworkZone)
+            .where(
+              and(
+                eq(frameworkZone.frameworkId, frameworkId),
+                eq(frameworkZone.zoneKey, zoneKey)
+              )
+            )
+            .limit(1);
+
+          if (zone) {
+            await db.insert(canvasNodeZoneAffinity).values({
+              nodeId: newNode.id,
+              frameworkId,
+              zoneId: zone.id,
+              affinityWeight: weight,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            });
+          }
+        }
+      }
+    }
 
     return newNode;
   } catch (_error) {
@@ -990,5 +1031,321 @@ export async function deleteProject({ projectId }: { projectId: string }) {
     return await db.delete(project).where(eq(project.id, projectId));
   } catch (_error) {
     throw new ChatSDKError("bad_request:database", "Failed to delete project");
+  }
+}
+
+// ========== Framework Queries ==========
+
+/**
+ * Get all frameworks accessible to a user (platform + user-owned)
+ * If userId is empty/undefined, returns only platform frameworks
+ */
+export async function getFrameworksForUser(userId?: string): Promise<Framework[]> {
+  try {
+    const conditions = [eq(framework.isActive, true)];
+
+    if (userId) {
+      // User-specific: platform frameworks OR user-owned frameworks
+      conditions.push(or(isNull(framework.ownerId), eq(framework.ownerId, userId)));
+    } else {
+      // No user: only platform frameworks
+      conditions.push(isNull(framework.ownerId));
+    }
+
+    return await db
+      .select()
+      .from(framework)
+      .where(and(...conditions))
+      .orderBy(asc(framework.ownerId), asc(framework.name)); // Platform frameworks (NULL) first
+  } catch (error) {
+    console.error("[getFrameworksForUser] Database error:", error);
+    throw new ChatSDKError("bad_request:database", "Failed to get frameworks");
+  }
+}
+
+/**
+ * Get a single framework with its zones
+ */
+export async function getFrameworkWithZones(frameworkId: string) {
+  try {
+    const fw = await db
+      .select()
+      .from(framework)
+      .where(eq(framework.id, frameworkId))
+      .limit(1);
+
+    if (!fw[0]) return null;
+
+    const zones = await db
+      .select()
+      .from(frameworkZone)
+      .where(eq(frameworkZone.frameworkId, frameworkId))
+      .orderBy(asc(frameworkZone.displayOrder));
+
+    return { ...fw[0], zones };
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to get framework with zones");
+  }
+}
+
+/**
+ * Create a custom framework with zones
+ */
+export async function createFramework(data: {
+  name: string;
+  icon: string;
+  description: string;
+  ownerId: string;
+  zones: Array<{
+    zoneKey: string;
+    name: string;
+    description?: string;
+    colorKey: string;
+    displayOrder: number;
+  }>;
+}) {
+  try {
+    return await db.transaction(async (tx) => {
+      const [newFramework] = await tx
+        .insert(framework)
+        .values({
+          name: data.name,
+          icon: data.icon,
+          description: data.description,
+          ownerId: data.ownerId,
+          visibility: "private",
+          isActive: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .returning();
+
+      const newZones = await tx
+        .insert(frameworkZone)
+        .values(
+          data.zones.map((z) => ({
+            frameworkId: newFramework.id,
+            zoneKey: z.zoneKey,
+            name: z.name,
+            description: z.description,
+            colorKey: z.colorKey,
+            displayOrder: z.displayOrder,
+            createdAt: new Date(),
+          }))
+        )
+        .returning();
+
+      return { framework: newFramework, zones: newZones };
+    });
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to create framework");
+  }
+}
+
+/**
+ * Get node affinities for a specific project-framework combination
+ */
+export async function getNodeAffinitiesForFramework(projectId: string, frameworkId: string) {
+  try {
+    const results = await db
+      .select({
+        nodeId: canvasNodeZoneAffinity.nodeId,
+        zoneKey: frameworkZone.zoneKey,
+        weight: canvasNodeZoneAffinity.affinityWeight,
+      })
+      .from(canvasNodeZoneAffinity)
+      .innerJoin(canvasNode, eq(canvasNode.id, canvasNodeZoneAffinity.nodeId))
+      .innerJoin(frameworkZone, eq(frameworkZone.id, canvasNodeZoneAffinity.zoneId))
+      .where(
+        and(
+          eq(canvasNode.projectId, projectId),
+          eq(canvasNodeZoneAffinity.frameworkId, frameworkId)
+        )
+      );
+
+    // Transform to { nodeId: { zoneKey: weight } }
+    const affinities: Record<string, Record<string, number>> = {};
+
+    for (const row of results) {
+      if (!affinities[row.nodeId]) affinities[row.nodeId] = {};
+      affinities[row.nodeId][row.zoneKey] = row.weight;
+    }
+
+    return affinities;
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to get node affinities");
+  }
+}
+
+/**
+ * Update node affinities for a specific framework
+ * @param affinities - Keyed by zoneKey (e.g., { "ideation": 1.0, "design": 0.5 })
+ */
+export async function updateNodeAffinities(
+  nodeId: string,
+  frameworkId: string,
+  affinities: Record<string, number> // { zoneKey: weight }
+) {
+  try {
+    return await db.transaction(async (tx) => {
+      // Delete existing affinities for this node-framework pair
+      await tx
+        .delete(canvasNodeZoneAffinity)
+        .where(
+          and(
+            eq(canvasNodeZoneAffinity.nodeId, nodeId),
+            eq(canvasNodeZoneAffinity.frameworkId, frameworkId)
+          )
+        );
+
+      // Insert new affinities
+      if (Object.keys(affinities).length > 0) {
+        // First, get zone IDs for the given zoneKeys
+        const zones = await tx
+          .select({ zoneKey: frameworkZone.zoneKey, zoneId: frameworkZone.id })
+          .from(frameworkZone)
+          .where(eq(frameworkZone.frameworkId, frameworkId));
+
+        // Build map: zoneKey → zoneId
+        const zoneKeyToId = new Map(zones.map(z => [z.zoneKey, z.zoneId]));
+
+        // Convert zoneKeys to zoneIds and insert
+        const values = Object.entries(affinities)
+          .map(([zoneKey, weight]) => {
+            const zoneId = zoneKeyToId.get(zoneKey);
+            if (!zoneId) return null; // Skip invalid zoneKeys
+            return {
+              nodeId,
+              frameworkId,
+              zoneId,
+              affinityWeight: weight,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            };
+          })
+          .filter(Boolean); // Remove nulls
+
+        if (values.length > 0) {
+          await tx.insert(canvasNodeZoneAffinity).values(values);
+        }
+      }
+    });
+  } catch (error) {
+    console.error("[updateNodeAffinities] Database error:", error);
+    throw new ChatSDKError("bad_request:database", "Failed to update node affinities");
+  }
+}
+
+/**
+ * Get node positions for a specific framework
+ * @returns Map of nodeId → { x, y }
+ */
+export async function getNodePositions(
+  frameworkId: string,
+  nodeIds: string[]
+): Promise<Record<string, { x: number; y: number }>> {
+  try {
+    if (nodeIds.length === 0) return {};
+
+    const positions = await db
+      .select({
+        nodeId: canvasNodePosition.nodeId,
+        x: canvasNodePosition.x,
+        y: canvasNodePosition.y,
+      })
+      .from(canvasNodePosition)
+      .where(
+        and(
+          eq(canvasNodePosition.frameworkId, frameworkId),
+          inArray(canvasNodePosition.nodeId, nodeIds)
+        )
+      );
+
+    const result: Record<string, { x: number; y: number }> = {};
+    for (const pos of positions) {
+      result[pos.nodeId] = { x: pos.x, y: pos.y };
+    }
+
+    return result;
+  } catch (error) {
+    console.error("[getNodePositions] Database error:", error);
+    return {};
+  }
+}
+
+/**
+ * Batch update node positions for a specific framework
+ * @param positions - Array of { nodeId, x, y }
+ */
+export async function batchUpdateNodePositions(
+  frameworkId: string,
+  positions: Array<{ nodeId: string; x: number; y: number }>
+) {
+  try {
+    if (positions.length === 0) return;
+
+    await db.transaction(async (tx) => {
+      // Use upsert pattern: delete + insert
+      const nodeIds = positions.map(p => p.nodeId);
+
+      await tx
+        .delete(canvasNodePosition)
+        .where(
+          and(
+            eq(canvasNodePosition.frameworkId, frameworkId),
+            inArray(canvasNodePosition.nodeId, nodeIds)
+          )
+        );
+
+      await tx.insert(canvasNodePosition).values(
+        positions.map(p => ({
+          nodeId: p.nodeId,
+          frameworkId,
+          x: p.x,
+          y: p.y,
+          updatedAt: new Date(),
+        }))
+      );
+    });
+  } catch (error) {
+    console.error("[batchUpdateNodePositions] Database error:", error);
+    throw new ChatSDKError("bad_request:database", "Failed to update node positions");
+  }
+}
+
+/**
+ * Get project's default framework with zones
+ */
+export async function getProjectFramework(projectId: string) {
+  try {
+    const result = await db
+      .select({
+        framework: framework,
+        zones: frameworkZone,
+      })
+      .from(project)
+      .leftJoin(framework, eq(framework.id, project.defaultFrameworkId))
+      .leftJoin(frameworkZone, eq(frameworkZone.frameworkId, framework.id))
+      .where(eq(project.id, projectId));
+
+    if (!result[0]?.framework) return null;
+
+    const fw = result[0].framework;
+    const zones = result.map((r) => r.zones).filter((z) => z !== null) as FrameworkZone[];
+
+    return { ...fw, zones };
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to get project framework");
+  }
+}
+
+/**
+ * Set project's default framework
+ */
+export async function setProjectFramework(projectId: string, frameworkId: string) {
+  try {
+    await db.update(project).set({ defaultFrameworkId: frameworkId }).where(eq(project.id, projectId));
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to set project framework");
   }
 }

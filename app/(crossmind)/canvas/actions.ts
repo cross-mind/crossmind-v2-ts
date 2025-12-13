@@ -18,6 +18,7 @@ export async function createNodeAction(data: {
   tags?: string[];
   positions?: Record<string, { x: number; y: number }>;
   zoneAffinities?: Record<string, Record<string, number>>;
+  displayOrder?: number;
   taskStatus?: "todo" | "in-progress" | "done";
   assigneeId?: string;
   dueDate?: Date;

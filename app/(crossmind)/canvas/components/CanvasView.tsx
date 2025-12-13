@@ -11,7 +11,7 @@ import { useZoomPan } from "../hooks/useZoomPan";
 import { useCanvasLayout } from "../hooks/useCanvasLayout";
 import { CanvasNodeCard } from "./CanvasNodeCard";
 import type { NodeContent, ThinkingFramework, CanvasNode } from "../lib/canvas-types";
-import { FRAMEWORKS, ZONE_COLORS } from "../canvas-data";
+import { ZONE_COLORS } from "../canvas-data";
 
 interface CanvasViewProps {
   nodeContents: NodeContent[];

@@ -69,9 +69,11 @@ export interface ThinkingFramework {
   description: string;
   zones: Array<{
     id: string;
+    zoneKey: string; // Stable identifier for zone matching with affinities
     name: string;
-    description: string;
-    color: string;
+    description: string | null;
+    colorKey: string; // References ZONE_COLORS constant
+    color?: string; // Computed color value (for backward compatibility)
   }>;
 }
 

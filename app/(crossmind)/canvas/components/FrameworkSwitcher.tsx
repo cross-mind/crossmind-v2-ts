@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { ChevronDown, Check } from "lucide-react";
-import { FRAMEWORKS, ZONE_COLORS, type ThinkingFramework } from "../canvas-data";
+import { ZONE_COLORS, type ThinkingFramework } from "../canvas-data";
+import { useFrameworks } from "@/hooks/use-frameworks";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,7 +13,7 @@ import {
 import { Button } from "@/components/ui/button";
 
 interface FrameworkSwitcherProps {
-  currentFramework: ThinkingFramework;
+  currentFramework: ThinkingFramework | null;
   onFrameworkChange: (framework: ThinkingFramework) => void;
 }
 
@@ -21,6 +22,12 @@ export function FrameworkSwitcher({
   onFrameworkChange,
 }: FrameworkSwitcherProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const { frameworks } = useFrameworks();
+
+  // Don't render until framework is loaded
+  if (!currentFramework) {
+    return null;
+  }
 
   return (
     <DropdownMenu open={isOpen} onOpenChange={setIsOpen}>
@@ -38,7 +45,7 @@ export function FrameworkSwitcher({
         <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
           切换思维框架
         </div>
-        {FRAMEWORKS.map((framework) => (
+        {frameworks.map((framework: ThinkingFramework) => (
           <DropdownMenuItem
             key={framework.id}
             onClick={() => {
@@ -61,12 +68,12 @@ export function FrameworkSwitcher({
                 {framework.description}
               </p>
               <div className="flex flex-wrap gap-1 mt-2">
-                {framework.zones.map((zone, idx) => (
+                {framework.zones.map((zone: { id: string; name: string; colorKey: string }, idx: number) => (
                   <span
                     key={zone.id}
                     className="text-[10px] px-1.5 py-0.5 rounded text-white font-medium"
                     style={{
-                      backgroundColor: ZONE_COLORS[zone.colorKey].label,
+                      backgroundColor: ZONE_COLORS[zone.colorKey as keyof typeof ZONE_COLORS].label,
                       opacity: 0.9,
                     }}
                   >

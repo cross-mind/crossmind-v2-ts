@@ -5,25 +5,32 @@ import {
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { Sparkles, Plus, Trash2 } from "lucide-react";
-import type { CanvasNode } from "../canvas-data";
+import { Sparkles, Plus, Trash2, MoveRight } from "lucide-react";
+import type { CanvasNode, ThinkingFramework } from "../canvas-data";
 
 interface NodeContextMenuProps {
   node: CanvasNode;
   children: React.ReactNode;
+  currentFramework?: ThinkingFramework | null;
   onOpenAIChat: (node: CanvasNode) => void;
   onAddChild: (node: CanvasNode) => void;
   onDelete: (node: CanvasNode) => void;
+  onMoveToZone?: (node: CanvasNode, zoneKey: string) => void;
 }
 
 export function NodeContextMenu({
   node,
   children,
+  currentFramework,
   onOpenAIChat,
   onAddChild,
   onDelete,
+  onMoveToZone,
 }: NodeContextMenuProps) {
   return (
     <ContextMenu>
@@ -47,6 +54,33 @@ export function NodeContextMenu({
           <Plus className="mr-2 h-4 w-4" />
           <span>Add Child</span>
         </ContextMenuItem>
+
+        {/* Move to Zone submenu */}
+        {currentFramework && onMoveToZone && (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuSub>
+              <ContextMenuSubTrigger>
+                <MoveRight className="mr-2 h-4 w-4" />
+                <span>Move to Zone</span>
+              </ContextMenuSubTrigger>
+              <ContextMenuSubContent className="w-48">
+                {currentFramework.zones.map((zone: ThinkingFramework["zones"][number]) => (
+                  <ContextMenuItem
+                    key={zone.id}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onMoveToZone(node, zone.zoneKey);
+                    }}
+                  >
+                    <span className="truncate">{zone.name}</span>
+                  </ContextMenuItem>
+                ))}
+              </ContextMenuSubContent>
+            </ContextMenuSub>
+          </>
+        )}
+
         <ContextMenuSeparator />
         <ContextMenuItem
           onClick={(e) => {

@@ -15,27 +15,31 @@ import { NodeHealthBadge } from "./NodeHealthBadge";
 import { DropIndicator } from "./DropIndicator";
 import { NodeContextMenu } from "./NodeContextMenu";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
-import type { CanvasNode } from "../canvas-data";
+import type { CanvasNode, ThinkingFramework } from "../canvas-data";
 
 // 子节点卡片组件（支持拖放）
 function ChildNodeCard({
   child,
   childConfig,
   grandChildren,
+  currentFramework,
   onNodeClick,
   onOpenAIChat,
   onAddChild,
   onDelete,
+  onMoveToZone,
   overNodeId,
   dropPosition,
 }: {
   child: CanvasNode;
   childConfig: NodeTypeConfig;
   grandChildren: CanvasNode[];
+  currentFramework?: ThinkingFramework | null;
   onNodeClick: (node: CanvasNode, e: React.MouseEvent) => void;
   onOpenAIChat: (node: CanvasNode) => void;
   onAddChild: (node: CanvasNode) => void;
   onDelete: (node: CanvasNode) => void;
+  onMoveToZone?: (node: CanvasNode, zoneKey: string) => void;
   overNodeId: string | null;
   dropPosition: "top" | "bottom" | "center" | null;
 }) {
@@ -67,9 +71,11 @@ function ChildNodeCard({
 
       <NodeContextMenu
         node={child}
+        currentFramework={currentFramework}
         onOpenAIChat={onOpenAIChat}
         onAddChild={onAddChild}
         onDelete={onDelete}
+        onMoveToZone={onMoveToZone}
       >
         <div
           ref={setRefs}
@@ -78,7 +84,8 @@ function ChildNodeCard({
           {...attributes}
           className={cn(
             "flex items-center gap-2 py-1 px-2 -ml-4 pl-6 rounded-lg cursor-grab active:cursor-grabbing group/child transition-all",
-            isDragging && "opacity-50 scale-95 cursor-grabbing",
+            // 移除拖动时的缩放和半透明效果
+            isDragging && "cursor-grabbing",
             isChildDragOver && dropPosition === "center" && "ring-2 ring-primary ring-offset-1 bg-primary/5",
             !isDragging && !isChildDragOver && "hover:bg-muted/50"
           )}
@@ -112,10 +119,12 @@ interface CanvasNodeCardProps {
   visibleNodes: CanvasNode[];
   selectedNodeId: string | null;
   nodeTypeConfig: Record<string, NodeTypeConfig>;
+  currentFramework?: ThinkingFramework | null;
   onNodeClick: (node: CanvasNode, e: React.MouseEvent) => void;
   onOpenAIChat: (node: CanvasNode) => void;
   onAddChild: (node: CanvasNode) => void;
   onDelete: (node: CanvasNode) => void;
+  onMoveToZone?: (node: CanvasNode, zoneKey: string) => void;
   onNodeRefSet: (id: string, el: HTMLDivElement | null) => void;
   matchesFilter: (node: CanvasNode) => boolean;
   stageFilter: string;
@@ -129,10 +138,12 @@ export function CanvasNodeCard({
   visibleNodes,
   selectedNodeId,
   nodeTypeConfig,
+  currentFramework,
   onNodeClick,
   onOpenAIChat,
   onAddChild,
   onDelete,
+  onMoveToZone,
   onNodeRefSet,
   matchesFilter,
   stageFilter,
@@ -193,10 +204,12 @@ export function CanvasNodeCard({
                 child={child}
                 childConfig={childConfig}
                 grandChildren={grandChildren}
+                currentFramework={currentFramework}
                 onNodeClick={onNodeClick}
                 onOpenAIChat={onOpenAIChat}
                 onAddChild={onAddChild}
                 onDelete={onDelete}
+                onMoveToZone={onMoveToZone}
                 overNodeId={overNodeId}
                 dropPosition={dropPosition}
               />
@@ -214,9 +227,11 @@ export function CanvasNodeCard({
     <HealthPopover node={node}>
       <NodeContextMenu
         node={node}
+        currentFramework={currentFramework}
         onOpenAIChat={onOpenAIChat}
         onAddChild={onAddChild}
         onDelete={onDelete}
+        onMoveToZone={onMoveToZone}
       >
         <div
           ref={setCardRef}
@@ -231,7 +246,8 @@ export function CanvasNodeCard({
               : isHighlighted
                 ? "border-border hover:border-primary/50 hover:shadow-md"
                 : "border-border/30 opacity-40 hover:opacity-60",
-            isDragging && "opacity-50 scale-95 cursor-grabbing",
+            // 移除拖动时的缩放和半透明效果，只保留 cursor
+            isDragging && "cursor-grabbing",
             // Enhanced visual feedback for drop positions
             isDragOver && dropPosition === "center" && "ring-4 ring-primary ring-offset-2 bg-primary/5",
             isDragOver && dropPosition === "top" && "border-t-4 border-t-primary",

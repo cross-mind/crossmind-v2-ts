@@ -2,15 +2,17 @@
 
 import type { ThinkingFramework } from "../canvas-data";
 import { ZONE_COLORS } from "../canvas-data";
+import { DroppableZone } from "./DroppableZone";
 
 interface StrategicZonesProps {
   showStrategicZones: boolean;
   canvasOffset: { x: number; y: number };
   scale: number;
   layoutCalculated: boolean;
-  currentFramework: ThinkingFramework;
+  currentFramework: ThinkingFramework | null;
   zoneBounds: Record<string, { width: number; height: number }>;
   getDynamicZoneConfigs: () => Record<string, { startX: number; startY: number; columnCount: number; nodeIds: string[] }>;
+  overNodeId: string | null;
 }
 
 export function StrategicZones({
@@ -21,17 +23,19 @@ export function StrategicZones({
   currentFramework,
   zoneBounds,
   getDynamicZoneConfigs,
+  overNodeId,
 }: StrategicZonesProps) {
-  if (!showStrategicZones) return null;
+  if (!showStrategicZones || !currentFramework) return null;
 
   return (
     <div
-      className="absolute pointer-events-none"
+      className="absolute"
       style={{
         left: 0,
         top: 0,
         width: "4000px",
         height: "3000px",
+        pointerEvents: 'none', // Disable by default, children will enable as needed
       }}
     >
       {/* Render zones based on current framework */}
@@ -44,31 +48,17 @@ export function StrategicZones({
           const config = zoneConfigs[zone.id];
           const zoneBound = zoneBounds[zone.id];
 
-          // Get colors from the palette using colorKey
-          const colors = ZONE_COLORS[zone.colorKey];
+          // Check if this zone is being hovered over
+          const isOver = overNodeId === `zone-${zone.id}`;
 
           return (
-            <div
+            <DroppableZone
               key={zone.id}
-              className="absolute border-2 border-dashed rounded-2xl transition-all duration-500"
-              style={{
-                left: config.startX - 20,
-                top: config.startY - 20,
-                width: zoneBound?.width || 800,
-                height: zoneBound?.height || 800,
-                borderColor: `${colors.base}4D`, // 30% opacity for border
-                backgroundColor: `${colors.base}1A`, // 10% opacity for background
-              }}
-            >
-              <div
-                className="absolute top-3 left-4 text-sm font-bold px-3 py-1.5 rounded-lg inline-block text-white shadow-md"
-                style={{
-                  backgroundColor: colors.label,
-                }}
-              >
-                {zone.name}
-              </div>
-            </div>
+              zone={zone}
+              config={config}
+              zoneBound={zoneBound}
+              isOver={isOver}
+            />
           );
         });
       })()}

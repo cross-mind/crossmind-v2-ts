@@ -7,16 +7,23 @@ import { useState, useCallback } from "react";
 import { mutate } from "swr";
 import type { CanvasNode } from "../canvas-data";
 import { createNodeAction, addCommentAction, updateNodeAction } from "../actions";
+import type { ZoneInfo } from "./useZoneDetection";
+import type { NodeType } from "../node-type-config";
 
 interface UseCanvasActionsProps {
   projectId: string | null;
   nodes: CanvasNode[];
+  currentFrameworkId?: string | null;
 }
 
-export function useCanvasActions({ projectId, nodes }: UseCanvasActionsProps) {
+export function useCanvasActions({ projectId, nodes, currentFrameworkId }: UseCanvasActionsProps) {
   // Node Dialog state
   const [nodeDialogOpen, setNodeDialogOpen] = useState(false);
   const [nodeDialogParentId, setNodeDialogParentId] = useState<string | null>(null);
+
+  // Quick Node Dialog state
+  const [quickNodeDialogOpen, setQuickNodeDialogOpen] = useState(false);
+  const [quickNodeZone, setQuickNodeZone] = useState<ZoneInfo | null>(null);
 
   // Tag Dialog state
   const [tagDialogOpen, setTagDialogOpen] = useState(false);
@@ -118,6 +125,44 @@ export function useCanvasActions({ projectId, nodes }: UseCanvasActionsProps) {
     [commentInput, projectId]
   );
 
+  /**
+   * Handle quick node creation from context menu
+   */
+  const handleQuickCreateNode = useCallback(
+    async (data: { title: string; type: NodeType }, displayOrder?: number) => {
+      if (!projectId) return;
+
+      try {
+        // Build zone affinities if zone is detected
+        const zoneAffinities = quickNodeZone && currentFrameworkId
+          ? { [currentFrameworkId]: { [quickNodeZone.zoneKey]: 1.0 } }
+          : undefined;
+
+        await createNodeAction({
+          projectId,
+          title: data.title,
+          content: "",
+          type: data.type,
+          zoneAffinities,
+          displayOrder,
+        });
+
+        // Revalidate SWR cache for both canvas nodes and affinities
+        mutate(`/api/canvas?projectId=${projectId}`);
+        if (currentFrameworkId) {
+          mutate(`/api/canvas/affinities?projectId=${projectId}&frameworkId=${currentFrameworkId}`);
+        }
+
+        // Reset state
+        setQuickNodeZone(null);
+      } catch (error) {
+        console.error("Failed to create quick node:", error);
+        throw error;
+      }
+    },
+    [projectId, quickNodeZone, currentFrameworkId]
+  );
+
   return {
     // Node Dialog
     nodeDialogOpen,
@@ -125,6 +170,13 @@ export function useCanvasActions({ projectId, nodes }: UseCanvasActionsProps) {
     nodeDialogParentId,
     handleAddChild,
     handleCreateNode,
+
+    // Quick Node Dialog
+    quickNodeDialogOpen,
+    setQuickNodeDialogOpen,
+    quickNodeZone,
+    setQuickNodeZone,
+    handleQuickCreateNode,
 
     // Tag Dialog
     tagDialogOpen,

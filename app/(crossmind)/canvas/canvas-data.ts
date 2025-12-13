@@ -107,9 +107,10 @@ export interface ThinkingFramework {
   description: string;
   zones: {
     id: string;
+    zoneKey: string; // Stable identifier for zone matching with affinities
     name: string;
     colorKey: ZoneColorKey;
-    description?: string;
+    description?: string | null;
   }[];
 }
 

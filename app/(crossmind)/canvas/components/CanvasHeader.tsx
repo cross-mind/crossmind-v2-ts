@@ -9,7 +9,7 @@ import { HealthOverview } from "./HealthOverview";
 import type { ThinkingFramework, CanvasNode, AISuggestion } from "../canvas-data";
 
 interface CanvasHeaderProps {
-  currentFramework: ThinkingFramework;
+  currentFramework: ThinkingFramework | null;
   onFrameworkChange: (framework: ThinkingFramework) => void;
   nodes: CanvasNode[];
   suggestions: AISuggestion[];

@@ -1,6 +1,16 @@
-import { gateway } from "@ai-sdk/gateway";
+import { createOpenAI } from "@ai-sdk/openai";
 import { customProvider, extractReasoningMiddleware, wrapLanguageModel } from "ai";
 import { isTestEnvironment } from "../constants";
+
+// Configure OpenRouter
+const openrouter = createOpenAI({
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: process.env.OPENROUTER_API_KEY,
+  headers: {
+    "HTTP-Referer": "https://crossmind.app", // Optional: for OpenRouter rankings
+    "X-Title": "CrossMind", // Optional: shows in OpenRouter dashboard
+  },
+});
 
 export const myProvider = isTestEnvironment
   ? (() => {
@@ -16,12 +26,13 @@ export const myProvider = isTestEnvironment
     })()
   : customProvider({
       languageModels: {
-        "chat-model": gateway.languageModel("xai/grok-2-vision-1212"),
+        // Using Claude Sonnet 4.5 via OpenRouter
+        "chat-model": openrouter("anthropic/claude-sonnet-4.5"),
         "chat-model-reasoning": wrapLanguageModel({
-          model: gateway.languageModel("xai/grok-3-mini"),
+          model: openrouter("anthropic/claude-sonnet-4.5"),
           middleware: extractReasoningMiddleware({ tagName: "think" }),
         }),
-        "title-model": gateway.languageModel("xai/grok-2-1212"),
-        "artifact-model": gateway.languageModel("xai/grok-2-1212"),
+        "title-model": openrouter("anthropic/claude-sonnet-4.5"),
+        "artifact-model": openrouter("anthropic/claude-sonnet-4.5"),
       },
     });
