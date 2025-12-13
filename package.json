@@ -3,7 +3,11 @@
   "version": "3.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --turbo -p 8000",
+    "dev": "tsx lib/scripts/dev-server.ts",
+    "dev:direct": "next dev --turbo -p 8000",
+    "logs": "tsx lib/scripts/view-logs.ts",
+    "stop": "tsx lib/scripts/stop-server.ts",
+    "clean:logs": "rm -rf .logs",
     "build": "tsx lib/db/migrate && next build --experimental-build-mode=compile",
     "start": "next start -p 8000",
     "lint": "npx ultracite@latest check",

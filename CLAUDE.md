@@ -482,6 +482,165 @@ Commit message prefixes:
 - `test`: Testing
 - `chore`: Build/tooling
 
+## Git Worktree Development Workflow
+
+**IMPORTANT**: All new feature development **MUST** use Git Worktree to maintain a clean separation between features and avoid disrupting the main workspace.
+
+### Why Git Worktree?
+
+Git Worktree allows multiple working directories from a single repository:
+- **Isolation**: Each feature develops in its own directory without affecting main workspace
+- **Parallel Development**: Work on multiple features simultaneously on different ports
+- **Clean State**: Main workspace remains untouched during feature development
+- **Easy Testing**: Switch between features without git stash/checkout cycles
+
+### When to Use Git Worktree
+
+**Always use Git Worktree for:**
+- New feature development
+- Experimental changes that span multiple files
+- Refactoring that requires testing in isolation
+- Any work that might need parallel development
+
+**Skip Git Worktree for:**
+- Quick bug fixes (1-2 file changes)
+- Documentation-only updates
+- Simple configuration changes
+
+### Creating a New Worktree
+
+```bash
+# 1. Create worktree from latest main branch commit
+# Format: git worktree add -b <branch-name> <directory> <base-branch>
+git worktree add -b feature/your-feature-name ../crossmind-feature main
+
+# Example:
+git worktree add -b feature/dev-server-log-management ../crossmind-logs main
+```
+
+**Branch Naming Conventions:**
+- Features: `feature/descriptive-name`
+- Bug fixes: `fix/issue-description`
+- Refactoring: `refactor/component-name`
+- Experiments: `exp/experiment-name`
+
+### Development Workflow
+
+**1. Start Development**
+```bash
+# Navigate to worktree directory
+cd ../crossmind-feature
+
+# Verify you're on the feature branch
+git branch --show-current
+
+# Install dependencies if needed
+pnpm install
+
+# Start development server (will use different port)
+pnpm dev
+```
+
+**2. Make Changes**
+```bash
+# Work normally in the worktree directory
+# Edit files, run tests, commit changes
+
+git add .
+git commit -m "feat: add new feature"
+```
+
+**3. Test Thoroughly**
+- Run all affected tests
+- Test with Chrome DevTools MCP if available
+- Verify server logs
+- Check database migrations if applicable
+
+**4. Prepare for Merge**
+```bash
+# Make sure all changes are committed
+git status
+
+# Rebase on latest main (if needed)
+git fetch origin
+git rebase origin/main
+```
+
+**5. Merge to Main**
+```bash
+# Switch back to main workspace
+cd /Users/ivan/Workspace/crossmind
+
+# Merge feature branch
+git merge feature/your-feature-name
+
+# Or use GitHub PR workflow:
+# Push branch and create PR
+git push origin feature/your-feature-name
+```
+
+**6. Cleanup Worktree**
+```bash
+# After merge, remove worktree
+git worktree remove ../crossmind-feature
+
+# Delete feature branch (if merged)
+git branch -d feature/your-feature-name
+```
+
+### Managing Multiple Worktrees
+
+```bash
+# List all worktrees
+git worktree list
+
+# Remove stale worktrees
+git worktree prune
+
+# Move a worktree to a different location
+git worktree move ../old-path ../new-path
+```
+
+### Dev Server Port Management
+
+When using multiple worktrees:
+- Each worktree can run its own dev server on different ports
+- Use `pnpm dev` in each worktree - it will prompt for port selection if 8000 is taken
+- Logs are isolated per port: `.logs/dev-server-{port}.log`
+- Stop specific instances: `pnpm stop {port}`
+
+### Best Practices
+
+1. **One Feature Per Worktree**: Don't mix multiple features in one worktree
+2. **Keep Worktrees Short-Lived**: Merge and cleanup promptly to avoid divergence
+3. **Use Descriptive Names**: Both branch and directory names should be clear
+4. **Commit Often**: Small, focused commits make review and debugging easier
+5. **Test Before Merge**: Always verify functionality in the worktree before merging
+6. **Clean Up After Merge**: Remove worktrees and delete merged branches
+
+### Common Commands Reference
+
+```bash
+# Create worktree
+git worktree add -b <branch> <path> <base>
+
+# List worktrees
+git worktree list
+
+# Remove worktree
+git worktree remove <path>
+
+# Move worktree
+git worktree move <old-path> <new-path>
+
+# Prune stale worktrees
+git worktree prune
+
+# Lock/unlock worktree (prevent removal)
+git worktree lock <path>
+git worktree unlock <path>
+```
+
 ## Common Patterns to Follow
 
 ### Adding New Database Tables

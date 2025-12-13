@@ -12,6 +12,7 @@ out/
 dist/
 build/
 scripts/
+!lib/scripts/
 
 # Production
 dist
@@ -60,3 +61,6 @@ playwright/.cache/
 # Backup files
 *.backup
 crossmind.backup/
+
+# Development server logs
+.logs/
