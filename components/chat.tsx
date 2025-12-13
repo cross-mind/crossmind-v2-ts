@@ -24,7 +24,7 @@ import type { Vote } from "@/lib/db/schema";
 import { ChatSDKError } from "@/lib/errors";
 import type { Attachment, ChatMessage } from "@/lib/types";
 import type { AppUsage } from "@/lib/usage";
-import { fetcher, fetchWithErrorHandlers, generateUUID } from "@/lib/utils";
+import { cn, fetcher, fetchWithErrorHandlers, generateUUID } from "@/lib/utils";
 import { Artifact } from "./artifact";
 import { useDataStream } from "./data-stream-provider";
 import { Messages } from "./messages";
@@ -32,6 +32,32 @@ import { MultimodalInput } from "./multimodal-input";
 import { getChatHistoryPaginationKey } from "./sidebar-history";
 import { toast } from "./toast";
 import type { VisibilityType } from "./visibility-selector";
+
+// New props for generalization
+export interface ChatProps {
+  id: string;
+  initialMessages: ChatMessage[];
+  initialChatModel: string;
+  initialVisibilityType: VisibilityType;
+  isReadonly: boolean;
+  autoResume: boolean;
+  initialLastContext?: AppUsage;
+  // New optional props for Canvas mode
+  mode?: "full-page" | "panel";
+  context?: {
+    type: "general" | "canvas";
+    nodeId?: string;
+    projectId?: string;
+  };
+  apiEndpoint?: string;
+  features?: {
+    showHeader?: boolean;
+    showArtifact?: boolean;
+    allowAttachments?: boolean;
+    allowModelSwitch?: boolean;
+    compactInput?: boolean;
+  };
+}
 
 export function Chat({
   id,
@@ -41,15 +67,20 @@ export function Chat({
   isReadonly,
   autoResume,
   initialLastContext,
-}: {
-  id: string;
-  initialMessages: ChatMessage[];
-  initialChatModel: string;
-  initialVisibilityType: VisibilityType;
-  isReadonly: boolean;
-  autoResume: boolean;
-  initialLastContext?: AppUsage;
-}) {
+  // Default values for new props (backward compatible)
+  mode = "full-page",
+  context = { type: "general" },
+  apiEndpoint = "/api/chat",
+  features = {},
+}: ChatProps) {
+  // Apply feature defaults
+  const {
+    showHeader = true,
+    showArtifact = true,
+    allowAttachments = true,
+    allowModelSwitch = true,
+    compactInput = false,
+  } = features;
   const router = useRouter();
 
   const { visibilityType } = useChatVisibility({
@@ -59,8 +90,12 @@ export function Chat({
 
   const { mutate } = useSWRConfig();
 
-  // Handle browser back/forward navigation
+  // Handle browser back/forward navigation (only in full-page mode)
   useEffect(() => {
+    if (mode !== "full-page") {
+      return;
+    }
+
     const handlePopState = () => {
       // When user navigates back/forward, refresh to sync with URL
       router.refresh();
@@ -68,7 +103,7 @@ export function Chat({
 
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, [router]);
+  }, [router, mode]);
   const { setDataStream } = useDataStream();
 
   const [input, setInput] = useState<string>("");
@@ -88,14 +123,44 @@ export function Chat({
       experimental_throttle: 100,
       generateId: generateUUID,
       transport: new DefaultChatTransport({
-        api: "/api/chat",
-        fetch: fetchWithErrorHandlers,
+        api: apiEndpoint,  // Use dynamic endpoint
+        fetch: async (...args) => {
+          console.log(`[Chat Component] Fetching: ${args[0]} (mode: ${mode})`);
+          try {
+            const result = await fetchWithErrorHandlers(...args);
+            console.log(`[Chat Component] Fetch successful`);
+            return result;
+          } catch (error) {
+            console.error(`[Chat Component] Fetch failed:`, error);
+            throw error;
+          }
+        },
         prepareSendMessagesRequest(request) {
+          // Base request body
+          const baseBody = {
+            id: request.id,
+            message: request.messages.at(-1),
+            selectedChatModel: currentModelIdRef.current,
+          };
+
+          // Add context-specific fields
+          if (context.type === "canvas") {
+            return {
+              body: {
+                sessionId: id,  // For canvas, id is the chat session ID
+                ...baseBody,
+                nodeContext: {
+                  nodeId: context.nodeId,
+                  projectId: context.projectId,
+                },
+              },
+            };
+          }
+
+          // General chat (original behavior)
           return {
             body: {
-              id: request.id,
-              message: request.messages.at(-1),
-              selectedChatModel: currentModelIdRef.current,
+              ...baseBody,
               selectedVisibilityType: visibilityType,
               ...request.body,
             },
@@ -109,9 +174,14 @@ export function Chat({
         }
       },
       onFinish: () => {
-        mutate(unstable_serialize(getChatHistoryPaginationKey));
+        // Only mutate chat history in full-page mode (not in Canvas panel mode)
+        if (mode === "full-page") {
+          mutate(unstable_serialize(getChatHistoryPaginationKey));
+        }
       },
       onError: (error) => {
+        console.error("[Chat Component] Error occurred:", error);
+
         if (error instanceof ChatSDKError) {
           // Check if it's a credit card error
           if (error.message?.includes("AI Gateway requires a valid credit card")) {
@@ -122,6 +192,13 @@ export function Chat({
               description: error.message,
             });
           }
+        } else {
+          // Log unexpected errors
+          console.error("[Chat Component] Unexpected error:", error);
+          toast({
+            type: "error",
+            description: "An unexpected error occurred. Please try again.",
+          });
         }
       },
     });
@@ -132,7 +209,8 @@ export function Chat({
   const [hasAppendedQuery, setHasAppendedQuery] = useState(false);
 
   useEffect(() => {
-    if (query && !hasAppendedQuery) {
+    // Only handle query parameter in full-page mode (not in panel mode for Canvas)
+    if (query && !hasAppendedQuery && mode === "full-page") {
       sendMessage({
         role: "user" as const,
         parts: [{ type: "text", text: query }],
@@ -141,7 +219,7 @@ export function Chat({
       setHasAppendedQuery(true);
       window.history.replaceState({}, "", `/chat/${id}`);
     }
-  }, [query, sendMessage, hasAppendedQuery, id]);
+  }, [query, sendMessage, hasAppendedQuery, id, mode]);
 
   const { data: votes } = useSWR<Vote[]>(
     messages.length >= 2 ? `/api/vote?chatId=${id}` : null,
@@ -160,12 +238,17 @@ export function Chat({
 
   return (
     <>
-      <div className="overscroll-behavior-contain flex h-dvh min-w-0 touch-pan-y flex-col bg-background">
-        <ChatHeader
-          chatId={id}
-          isReadonly={isReadonly}
-          selectedVisibilityType={initialVisibilityType}
-        />
+      <div className={cn(
+        "overscroll-behavior-contain flex min-w-0 touch-pan-y flex-col bg-background",
+        mode === "panel" ? "h-full" : "h-dvh"
+      )}>
+        {showHeader && (
+          <ChatHeader
+            chatId={id}
+            isReadonly={isReadonly}
+            selectedVisibilityType={initialVisibilityType}
+          />
+        )}
 
         <Messages
           chatId={id}
@@ -177,47 +260,57 @@ export function Chat({
           setMessages={setMessages}
           status={status}
           votes={votes}
+          compact={mode === "panel"}
         />
 
-        <div className="sticky bottom-0 z-1 mx-auto flex w-full max-w-4xl gap-2 border-t-0 bg-background px-2 pb-3 md:px-4 md:pb-4">
+        <div className={cn(
+          "sticky bottom-0 z-1 flex gap-2 border-t-0 bg-background",
+          mode === "panel"
+            ? "w-full px-3 pb-3"  // Compact for panel
+            : "mx-auto w-full max-w-4xl px-2 pb-3 md:px-4 md:pb-4"  // Original for full-page
+        )}>
           {!isReadonly && (
             <MultimodalInput
-              attachments={attachments}
+              attachments={allowAttachments ? attachments : []}
               chatId={id}
               input={input}
               messages={messages}
-              onModelChange={setCurrentModelId}
+              onModelChange={allowModelSwitch ? setCurrentModelId : undefined}
               selectedModelId={currentModelId}
               selectedVisibilityType={visibilityType}
               sendMessage={sendMessage}
-              setAttachments={setAttachments}
+              setAttachments={allowAttachments ? setAttachments : () => {}}
               setInput={setInput}
               setMessages={setMessages}
               status={status}
               stop={stop}
               usage={usage}
+              compact={compactInput}
+              mode={mode}
             />
           )}
         </div>
       </div>
 
-      <Artifact
-        attachments={attachments}
-        chatId={id}
-        input={input}
-        isReadonly={isReadonly}
-        messages={messages}
-        regenerate={regenerate}
-        selectedModelId={currentModelId}
-        selectedVisibilityType={visibilityType}
-        sendMessage={sendMessage}
-        setAttachments={setAttachments}
-        setInput={setInput}
-        setMessages={setMessages}
-        status={status}
-        stop={stop}
-        votes={votes}
-      />
+      {showArtifact && (
+        <Artifact
+          attachments={attachments}
+          chatId={id}
+          input={input}
+          isReadonly={isReadonly}
+          messages={messages}
+          regenerate={regenerate}
+          selectedModelId={currentModelId}
+          selectedVisibilityType={visibilityType}
+          sendMessage={sendMessage}
+          setAttachments={setAttachments}
+          setInput={setInput}
+          setMessages={setMessages}
+          status={status}
+          stop={stop}
+          votes={votes}
+        />
+      )}
 
       <AlertDialog onOpenChange={setShowCreditCardAlert} open={showCreditCardAlert}>
         <AlertDialogContent>

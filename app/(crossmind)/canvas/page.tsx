@@ -7,8 +7,7 @@ import {
   X,
 } from "lucide-react";
 import React, { useCallback, useEffect, useRef, useState, useMemo } from "react";
-import { useSearchParams } from "next/navigation";
-import type { SimpleChatMessage } from "@/components/simple-chat";
+import { useSearchParams, useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -23,7 +22,6 @@ import {
   VERTICAL_GAP,
   COLUMN_GAP,
   MOCK_FEED,
-  MOCK_COMMENTS,
   MOCK_SUGGESTIONS,
   type NodeContent,
   type CanvasNode,
@@ -42,8 +40,8 @@ import { CanvasHeader } from "./components/CanvasHeader";
 import { CanvasArea } from "./components/CanvasArea";
 import { NODE_TYPE_CONFIG } from "./node-type-config";
 import { extractStageFromTags } from "./lib/canvas-helpers";
-import { useCanvasNodes } from "@/hooks/use-canvas-nodes";
-import type { CanvasNode as DBCanvasNode } from "@/lib/db/schema";
+import { useCanvasNodes, useCanvasComments } from "@/hooks/use-canvas-nodes";
+import type { CanvasNode as DBCanvasNode, CanvasNodeComment } from "@/lib/db/schema";
 import { NodeDialog } from "./components/NodeDialog";
 import { TagDialog } from "./components/TagDialog";
 import { QuickNodeDialog } from "./components/QuickNodeDialog";
@@ -54,18 +52,52 @@ import { calculateNextDisplayOrderInZone } from "./lib/canvas-utils";
 import { useCanvasDragDrop } from "./hooks/useCanvasDragDrop";
 import { useNodePositions } from "@/hooks/use-node-positions";
 import { DndContext, DragOverlay, rectIntersection } from "@dnd-kit/core";
+import { useSession } from "next-auth/react";
+
+/**
+ * Transform database CanvasNodeComment to UI Comment format
+ * Handles user lookup and timestamp formatting
+ */
+function mapCommentToUI(comment: CanvasNodeComment, users: Map<string, string>): Comment {
+  const formatTimestamp = (date: Date): string => {
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return "just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
+  };
+
+  return {
+    id: comment.id,
+    user: comment.authorId ? (users.get(comment.authorId) || comment.authorId.slice(0, 8)) : "Unknown",
+    timestamp: formatTimestamp(comment.createdAt),
+    content: comment.content,
+  };
+}
 
 export default function CanvasPage() {
   // Get projectId from URL
   const searchParams = useSearchParams();
+  const router = useRouter();
   const projectId = searchParams.get("projectId");
+  const nodeIdFromUrl = searchParams.get("nodeId");
+  const tabFromUrl = searchParams.get("tab");
 
   // Fetch frameworks and project framework preference
   const { frameworks } = useFrameworks();
-  const { framework: projectFramework } = useProjectFramework(projectId || "");
+  const { framework: projectFramework, setFramework: setProjectFramework } = useProjectFramework(projectId || "");
 
   // Fetch real Canvas nodes from database
   const { nodes: dbNodes, isLoading, isError, mutate } = useCanvasNodes(projectId);
+
+  // Get session for user info
+  const { data: session } = useSession();
 
   // Convert database nodes to Canvas format
   const nodeContents = useMemo<NodeContent[]>(() => {
@@ -118,6 +150,7 @@ export default function CanvasPage() {
   // Track previous data hash to detect changes
   const prevDataHashRef = useRef<string>('');
   const prevAffinityHashRef = useRef<string>('');
+  const prevProjectIdRef = useRef<string | null>(null);
 
   // Zone layout constants (moved outside getDynamicZoneConfigs for reuse)
   const ZONE_WIDTH = 800;
@@ -146,6 +179,35 @@ export default function CanvasPage() {
     currentFramework?.id || null,
     nodeIds
   );
+
+  // Reset state when projectId changes
+  useEffect(() => {
+    if (prevProjectIdRef.current !== null && prevProjectIdRef.current !== projectId) {
+      console.log('[Canvas Page] Project changed, resetting state', {
+        prevProjectId: prevProjectIdRef.current,
+        newProjectId: projectId,
+      });
+
+      // Reset all node-related state
+      setNodes([]);
+      setSelectedNode(null);
+      setLayoutCalculated(false);
+      setShowAIChat(false);
+      positionsLoadedRef.current = false;
+      prevDataHashRef.current = '';
+      prevAffinityHashRef.current = '';
+
+      // Clear node refs
+      nodeRefs.current.clear();
+
+      // Force SWR to refetch
+      if (projectId) {
+        mutate();
+      }
+    }
+
+    prevProjectIdRef.current = projectId;
+  }, [projectId, mutate]);
 
   // Load project framework or default to first platform framework
   useEffect(() => {
@@ -239,7 +301,18 @@ export default function CanvasPage() {
 
     // Assign nodes that have affinity data to their best matching zone
     nodeContents.forEach(node => {
+      // Skip child nodes (they are rendered inside parent nodes)
+      if (node.parentId) return;
+
       const affinities = nodeAffinities[node.id]; // Get from database
+
+      console.log('[Layout] Processing node for zone assignment:', {
+        nodeId: node.id,
+        nodeTitle: node.title,
+        hasAffinities: !!affinities,
+        affinitiesKeys: affinities ? Object.keys(affinities) : [],
+        affinities: affinities,
+      });
 
       if (affinities && Object.keys(affinities).length > 0) {
         // Find zone with highest affinity weight
@@ -264,15 +337,47 @@ export default function CanvasPage() {
         }
         // If affinity exists but no matching zone in current framework,
         // node will be unassigned (not added to any zone)
+      } else {
+        // FALLBACK: For nodes without affinities, assign to first zone as default
+        // This ensures all root nodes are visible in the canvas
+        const firstZone = currentFramework.zones[0];
+        if (firstZone && configs[firstZone.id]) {
+          console.log('[Layout] Assigning node without affinities to first zone (fallback):', {
+            nodeId: node.id,
+            nodeTitle: node.title,
+            zoneId: firstZone.id,
+          });
+          configs[firstZone.id].nodeIds.push(node.id);
+          assignedNodeIds.add(node.id);
+        }
       }
-      // If no affinity data, node will be unassigned (placed outside zones)
+    });
+
+    // Count root nodes separately
+    const rootNodeCount = nodeContents.filter(n => !n.parentId).length;
+    const unassignedRootCount = rootNodeCount - assignedNodeIds.size;
+
+    // Debug: Log all zone configs
+    const zoneConfigsSummary = Object.entries(configs).map(([zoneId, config]) => {
+      const zone = currentFramework.zones.find(z => z.id === zoneId);
+      return {
+        zoneName: zone?.name || zoneId,
+        zoneId,
+        nodeCount: config.nodeIds.length,
+        nodeIds: config.nodeIds.slice(0, 5), // Only show first 5 to avoid log spam
+        allNodeIds: config.nodeIds, // Full list for debugging
+      };
     });
 
     console.log('[Layout] Zone assignment:', {
       frameworkId: currentFramework.id,
+      frameworkName: currentFramework.name,
       totalNodes: nodeContents.length,
+      rootNodes: rootNodeCount,
+      childNodes: nodeContents.length - rootNodeCount,
       assignedNodes: assignedNodeIds.size,
-      unassignedNodes: nodeContents.length - assignedNodeIds.size,
+      unassignedRootNodes: unassignedRootCount,
+      zoneConfigs: zoneConfigsSummary,
     });
 
     return configs;
@@ -327,8 +432,6 @@ export default function CanvasPage() {
 
   // AI Chat state
   const [showAIChat, setShowAIChat] = useState(false);
-  const [aiInput, setAiInput] = useState("");
-  const [aiChatHistory, setAiChatHistory] = useState<SimpleChatMessage[]>([]);
 
   // Strategic zones always enabled
   const showStrategicZones = true;
@@ -369,15 +472,37 @@ export default function CanvasPage() {
   const zonesContainerRef = useRef<HTMLDivElement>(null);
   const nodesContainerRef = useRef<HTMLDivElement>(null);
 
+  // Update URL when selectedNode changes
+  const updateUrl = useCallback((nodeId: string | null, tab?: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+
+    if (nodeId) {
+      params.set("nodeId", nodeId);
+    } else {
+      params.delete("nodeId");
+      params.delete("tab"); // Remove tab when no node selected
+    }
+
+    if (tab && nodeId) {
+      params.set("tab", tab);
+    } else if (!tab && nodeId) {
+      params.delete("tab");
+    }
+
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }, [searchParams, router]);
+
   const handleNodeClick = (node: CanvasNode, e: React.MouseEvent) => {
     e.stopPropagation();
     setSelectedNode(node);
     setShowAIChat(false); // Reset to document view when selecting a node
+    updateUrl(node.id, "document"); // Update URL with nodeId and default tab
   };
 
   const handleClosePanel = () => {
     setSelectedNode(null);
     setShowAIChat(false); // Reset AI chat state when closing panel
+    updateUrl(null); // Clear nodeId and tab from URL
   };
 
   const getFeedActivities = (nodeId: string): FeedActivity[] => {
@@ -391,10 +516,38 @@ export default function CanvasPage() {
   const handleOpenAIChat = (node: CanvasNode) => {
     setSelectedNode(node);
     setShowAIChat(true);
-    // Attach document reference to input
-    const reference = `📄 Reference Document: "${node.title}"\n\n`;
-    setAiInput(reference);
+    updateUrl(node.id, "ai-chat"); // Update URL with AI chat tab
   };
+
+  // Wrapper for setShowAIChat that also updates URL
+  const handleSetShowAIChat = useCallback((show: boolean) => {
+    setShowAIChat(show);
+    if (selectedNode) {
+      updateUrl(selectedNode.id, show ? "ai-chat" : "document");
+    }
+  }, [selectedNode, updateUrl]);
+
+  // Restore selected node from URL on initial load and sync with URL changes
+  useEffect(() => {
+    if (nodeIdFromUrl && nodes.length > 0) {
+      // Only restore if the URL node is different from current selection
+      const nodeToSelect = nodes.find(n => n.id === nodeIdFromUrl);
+      if (nodeToSelect && (!selectedNode || selectedNode.id !== nodeIdFromUrl)) {
+        setSelectedNode(nodeToSelect);
+        if (tabFromUrl === "ai-chat") {
+          setShowAIChat(true);
+        } else {
+          setShowAIChat(false);
+        }
+      }
+    } else if (!nodeIdFromUrl && selectedNode) {
+      // If URL has no nodeId but we have a selected node, clear it
+      // This handles when user closes panel or navigates back
+      setSelectedNode(null);
+      setShowAIChat(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodeIdFromUrl, tabFromUrl, nodes]);
 
   const handleDelete = async (node: CanvasNode) => {
     if (!confirm(`确定要删除节点"${node.title}"吗？这将同时删除其所有子节点。`)) {
@@ -405,6 +558,7 @@ export default function CanvasPage() {
     if (selectedNode?.id === node.id) {
       setSelectedNode(null);
       setShowAIChat(false);
+      updateUrl(null); // Clear URL when selected node is deleted
     }
 
     try {
@@ -467,21 +621,28 @@ export default function CanvasPage() {
     }
   };
 
-  const handleSendAIMessage = () => {
-    if (!aiInput.trim()) return;
-    // In demo, just add to history
-    setAiChatHistory([...aiChatHistory, { role: "user", content: aiInput }]);
-    setAiInput("");
-    // In real app, would send to AI backend
-  };
 
   // Handle framework change
-  const handleFrameworkChange = (framework: ThinkingFramework) => {
+  const handleFrameworkChange = async (framework: ThinkingFramework) => {
     setCurrentFramework(framework);
     // Reset layout to trigger recalculation with new framework
     setLayoutCalculated(false);
     setNodes([]);
     setZoneBounds({});
+
+    // Save framework preference to project
+    if (projectId) {
+      try {
+        await setProjectFramework(framework.id);
+        console.log('[Canvas Page] Saved framework preference:', {
+          projectId,
+          frameworkId: framework.id,
+          frameworkName: framework.name,
+        });
+      } catch (error) {
+        console.error('[Canvas Page] Failed to save framework preference:', error);
+      }
+    }
   };
 
   // Handle node reference click [[node-id]]
@@ -490,6 +651,7 @@ export default function CanvasPage() {
     if (referencedNode) {
       setSelectedNode(referencedNode);
       setShowAIChat(false);
+      updateUrl(referencedNode.id, "document"); // Update URL when navigating to referenced node
     }
   };
 
@@ -670,6 +832,12 @@ export default function CanvasPage() {
       return;
     }
 
+    // Wait for affinities to load from database
+    if (affinitiesLoading) {
+      console.log('[Layout] Waiting for affinities to load from database');
+      return;
+    }
+
     // Check if we should load persisted positions (only once)
     if (!positionsLoadedRef.current) {
       const hasPersistedPositions = Object.keys(persistedPositions).length > 0;
@@ -824,6 +992,15 @@ export default function CanvasPage() {
         content => !assignedNodeIds.has(content.id) && !content.parentId
       );
 
+      console.log('[Layout] Node assignment check:', {
+        totalNodeContents: nodeContents.length,
+        rootNodeContents: nodeContents.filter(n => !n.parentId).length,
+        assignedNodeIdsCount: assignedNodeIds.size,
+        assignedNodeIds: Array.from(assignedNodeIds),
+        unassignedRootNodesCount: unassignedRootNodes.length,
+        unassignedRootNodeIds: unassignedRootNodes.map(n => n.id),
+      });
+
       // Place unassigned nodes to the right of all zones
       if (unassignedRootNodes.length > 0 && currentFramework) {
         // Find the rightmost zone edge
@@ -867,6 +1044,13 @@ export default function CanvasPage() {
         }
       });
 
+      console.log('[Layout] Final calculated nodes:', {
+        totalCalculated: calculatedNodes.length,
+        rootCalculated: calculatedNodes.filter(n => !n.parentId).length,
+        childCalculated: calculatedNodes.filter(n => n.parentId).length,
+        rootNodeIds: calculatedNodes.filter(n => !n.parentId).map(n => n.id),
+      });
+
       setNodes(calculatedNodes);
       setZoneBounds(calculatedZoneBounds);
       setLayoutCalculated(true);
@@ -885,7 +1069,7 @@ export default function CanvasPage() {
       });
       savePositions(positionsToSave);
     });
-  }, [nodeContents, nodes.length, layoutCalculated, getDynamicZoneConfigs, savePositions, persistedPositions, currentFramework, positionsLoading]);
+  }, [nodeContents, nodes.length, layoutCalculated, getDynamicZoneConfigs, savePositions, persistedPositions, currentFramework, positionsLoading, affinitiesLoading]);
 
   // Node type config
   const nodeTypeConfig = NODE_TYPE_CONFIG;
@@ -1023,23 +1207,20 @@ export default function CanvasPage() {
         />
 
         {/* Right Panel */}
-        {selectedNode && (
+        {selectedNode && projectId && (
           <NodeDetailPanel
             selectedNode={selectedNode}
             nodeTypeConfig={nodeTypeConfig}
             nodes={nodes}
             showAIChat={showAIChat}
             commentInput={commentInput}
-            aiChatHistory={aiChatHistory}
-            aiInput={aiInput}
+            projectId={projectId}
             onClose={handleClosePanel}
-            onSetShowAIChat={setShowAIChat}
+            onSetShowAIChat={handleSetShowAIChat}
             onNodeClick={handleNodeClick}
             onAddTag={handleAddTag}
             onCommentInputChange={setCommentInput}
             onAddComment={() => selectedNode && handleAddComment(selectedNode.id)}
-            onAiInputChange={setAiInput}
-            onSendAIMessage={handleSendAIMessage}
             getFeedActivities={getFeedActivities}
             getComments={getComments}
             processContentWithReferences={processContentWithReferences}

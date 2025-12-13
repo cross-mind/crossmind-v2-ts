@@ -20,14 +20,27 @@ const fetcher = (url: string) => {
  * Hook to fetch all canvas nodes for a project
  */
 export function useCanvasNodes(projectId: string | null) {
+  const swrKey = projectId ? `/api/canvas?projectId=${projectId}` : null;
+
   const { data, error, mutate, isLoading } = useSWR<{ nodes: CanvasNode[] }>(
-    projectId ? `/api/canvas?projectId=${projectId}` : null,
+    swrKey,
     fetcher,
     {
       revalidateOnFocus: false, // Canvas data is manually edited, no need to auto-refresh
-      dedupingInterval: 5000,   // Avoid duplicate requests within 5 seconds
+      dedupingInterval: 0,       // Disable deduplication to ensure fresh data on project switch
+      keepPreviousData: false,   // Don't keep previous data when key changes
     },
   );
+
+  // Log when projectId or data changes
+  console.log('[useCanvasNodes] Hook state:', {
+    projectId,
+    swrKey,
+    hasData: !!data,
+    nodeCount: data?.nodes?.length || 0,
+    isLoading,
+    isError: !!error,
+  });
 
   return {
     nodes: data?.nodes,

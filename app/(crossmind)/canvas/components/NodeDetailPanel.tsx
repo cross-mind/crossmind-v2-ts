@@ -21,7 +21,8 @@ import {
 import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { SimpleChat } from "@/components/simple-chat";
+import { Chat } from "@/components/chat";
+import { useChatSession } from "@/hooks/use-chat-session";
 import type { CanvasNode } from "../canvas-data";
 
 interface NodeTypeConfig {
@@ -47,27 +48,19 @@ interface Comment {
   content: string;
 }
 
-interface AIMessage {
-  role: "user" | "assistant";
-  content: string;
-}
-
 interface NodeDetailPanelProps {
   selectedNode: CanvasNode;
   nodeTypeConfig: Record<string, NodeTypeConfig>;
   nodes: CanvasNode[];
   showAIChat: boolean;
   commentInput: string;
-  aiChatHistory: AIMessage[];
-  aiInput: string;
+  projectId: string;  // Add projectId prop for Canvas AI chat
   onClose: () => void;
   onSetShowAIChat: (show: boolean) => void;
   onNodeClick: (node: CanvasNode, e: React.MouseEvent) => void;
   onAddTag: (nodeId: string) => void;
   onCommentInputChange: (value: string) => void;
   onAddComment: () => void;
-  onAiInputChange: (value: string) => void;
-  onSendAIMessage: () => void;
   getFeedActivities: (nodeId: string) => FeedActivity[];
   getComments: (nodeId: string) => Comment[];
   processContentWithReferences: (content: string) => string;
@@ -80,16 +73,13 @@ export function NodeDetailPanel({
   nodes,
   showAIChat,
   commentInput,
-  aiChatHistory,
-  aiInput,
+  projectId,
   onClose,
   onSetShowAIChat,
   onNodeClick,
   onAddTag,
   onCommentInputChange,
   onAddComment,
-  onAiInputChange,
-  onSendAIMessage,
   getFeedActivities,
   getComments,
   processContentWithReferences,
@@ -97,6 +87,11 @@ export function NodeDetailPanel({
 }: NodeDetailPanelProps) {
   const config = nodeTypeConfig[selectedNode.type];
   const Icon = config.icon;
+
+  // Load chat session for this node (only when AI Chat tab is active)
+  const { sessionId, initialMessages, isLoading } = useChatSession(
+    showAIChat ? selectedNode.id : null
+  );
 
   // Build breadcrumb path
   const buildBreadcrumb = (nodeId: string): CanvasNode[] => {
@@ -492,14 +487,40 @@ export function NodeDetailPanel({
           </div>
         ) : (
           /* AI Chat Interface */
-          <SimpleChat
-            messages={aiChatHistory}
-            input={aiInput}
-            onInputChange={onAiInputChange}
-            onSend={onSendAIMessage}
-            emptyStateTitle="Chat with CrossMind AI"
-            emptyStateDescription="CrossMind AI can help you analyze documents, provide suggestions, and generate content. The current document reference is attached in the input box."
-          />
+          <div className="flex-1 flex flex-col min-h-0">
+            {isLoading ? (
+              <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                Loading chat session...
+              </div>
+            ) : sessionId ? (
+              <Chat
+                id={sessionId}
+                initialMessages={initialMessages}
+                mode="panel"
+                context={{
+                  type: "canvas",
+                  nodeId: selectedNode.id,
+                  projectId: projectId,  // Use projectId prop instead of selectedNode.projectId
+                }}
+                apiEndpoint="/api/canvas/chat"
+                features={{
+                  showHeader: false,
+                  showArtifact: false,
+                  allowAttachments: true,
+                  allowModelSwitch: false,
+                  compactInput: true,
+                }}
+                isReadonly={false}
+                autoResume={false}
+                initialChatModel="chat-model"
+                initialVisibilityType="private"
+              />
+            ) : (
+              <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
+                Failed to load chat session
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>

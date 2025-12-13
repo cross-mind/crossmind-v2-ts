@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import React, { Suspense } from "react";
 import { CrossMindSidebar } from "@/components/crossmind-sidebar";
+import { DataStreamProvider } from "@/components/data-stream-provider";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { auth } from "../(auth)/auth";
 
@@ -18,8 +19,10 @@ async function SidebarWrapper({ children }: { children: React.ReactNode }) {
 
   return (
     <SidebarProvider defaultOpen={!isCollapsed}>
-      <CrossMindSidebar user={session?.user} />
-      <SidebarInset>{children}</SidebarInset>
+      <DataStreamProvider>
+        <CrossMindSidebar user={session?.user} />
+        <SidebarInset>{children}</SidebarInset>
+      </DataStreamProvider>
     </SidebarProvider>
   );
 }

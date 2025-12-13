@@ -39,6 +39,8 @@ import {
   type Framework,
   frameworkZone,
   type FrameworkZone,
+  chatSession,
+  type ChatSession,
 } from "./schema";
 import { generateHashedPassword } from "./utils";
 
@@ -216,7 +218,9 @@ export async function getChatById({ id }: { id: string }) {
 export async function saveMessages({ messages }: { messages: DBMessage[] }) {
   try {
     return await db.insert(message).values(messages);
-  } catch (_error) {
+  } catch (error) {
+    console.error("[saveMessages] Database error details:", error);
+    console.error("[saveMessages] Attempted to save messages:", JSON.stringify(messages, null, 2));
     throw new ChatSDKError("bad_request:database", "Failed to save messages");
   }
 }
@@ -575,6 +579,13 @@ export async function createCanvasNode({
   createdById: string;
 }) {
   try {
+    // Validate: prevent self-reference (will be enforced by DB constraint, but check early for better error message)
+    if (parentId) {
+      // Note: We can't check against the new node's ID yet since it doesn't exist
+      // The database CHECK constraint will catch this case
+      // This validation is mainly for clarity and early error detection in update scenarios
+    }
+
     const [newNode] = await db
       .insert(canvasNode)
       .values({
@@ -639,7 +650,14 @@ export async function createCanvasNode({
     }
 
     return newNode;
-  } catch (_error) {
+  } catch (error: any) {
+    // Check if error is due to self-reference constraint violation
+    if (error?.code === "23514" || error?.message?.includes("no_self_reference")) {
+      throw new ChatSDKError(
+        "bad_request:database",
+        "A node cannot reference itself as its parent. parentId must be different from the node's id or null.",
+      );
+    }
     throw new ChatSDKError("bad_request:database", "Failed to create canvas node");
   }
 }
@@ -676,6 +694,14 @@ export async function updateCanvasNode({
   healthData?: any;
 }) {
   try {
+    // Validate: prevent self-reference
+    if (parentId !== undefined && parentId !== null && parentId === id) {
+      throw new ChatSDKError(
+        "bad_request:database",
+        "A node cannot reference itself as its parent. parentId must be different from the node's id or null.",
+      );
+    }
+
     const [updated] = await db
       .update(canvasNode)
       .set({
@@ -698,7 +724,14 @@ export async function updateCanvasNode({
       .returning();
 
     return updated;
-  } catch (_error) {
+  } catch (error: any) {
+    // Check if error is due to self-reference constraint violation
+    if (error?.code === "23514" || error?.message?.includes("no_self_reference")) {
+      throw new ChatSDKError(
+        "bad_request:database",
+        "A node cannot reference itself as its parent. parentId must be different from the node's id or null.",
+      );
+    }
     throw new ChatSDKError("bad_request:database", "Failed to update canvas node");
   }
 }
@@ -918,7 +951,10 @@ export const SUBSCRIPTION_LIMITS = {
  */
 export async function getProjectsByUserId({ userId }: { userId: string }) {
   try {
-    return await db
+    console.log("[getProjectsByUserId] Querying for userId:", userId);
+
+    // Get projects where user is a member (via membership table)
+    const memberProjects = await db
       .select({
         id: project.id,
         name: project.name,
@@ -931,9 +967,57 @@ export async function getProjectsByUserId({ userId }: { userId: string }) {
       })
       .from(project)
       .innerJoin(membership, eq(membership.projectId, project.id))
-      .where(eq(membership.userId, userId))
-      .orderBy(desc(project.updatedAt));
+      .where(eq(membership.userId, userId));
+
+    console.log("[getProjectsByUserId] Member projects found:", memberProjects.length);
+
+    // Get projects owned by user (even if no membership record exists)
+    const ownedProjectsRaw = await db
+      .select({
+        id: project.id,
+        name: project.name,
+        description: project.description,
+        ownerId: project.ownerId,
+        workspaceContainerId: project.workspaceContainerId,
+        createdAt: project.createdAt,
+        updatedAt: project.updatedAt,
+        role: membership.role,
+      })
+      .from(project)
+      .leftJoin(membership, and(
+        eq(membership.projectId, project.id),
+        eq(membership.userId, userId)
+      ))
+      .where(eq(project.ownerId, userId));
+
+    console.log("[getProjectsByUserId] Owned projects found:", ownedProjectsRaw.length);
+
+    // Combine and deduplicate by project ID
+    const projectMap = new Map<string, typeof memberProjects[0]>();
+
+    // Add member projects first (these have guaranteed role from membership)
+    for (const proj of memberProjects) {
+      projectMap.set(proj.id, proj);
+    }
+
+    // Add owned projects (will overwrite if already exists, which is fine)
+    // For projects without membership, default role to "owner"
+    for (const proj of ownedProjectsRaw) {
+      const projectWithRole: typeof memberProjects[0] = {
+        ...proj,
+        role: (proj.role ?? "owner") as "owner" | "member" | "guest",
+      };
+      projectMap.set(proj.id, projectWithRole);
+    }
+
+    // Convert to array and sort by updatedAt
+    const result = Array.from(projectMap.values()).sort(
+      (a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()
+    );
+    console.log("[getProjectsByUserId] Final result:", result.length, "projects");
+    return result;
   } catch (_error) {
+    console.error("[getProjectsByUserId] Error:", _error);
     throw new ChatSDKError("bad_request:database", "Failed to get projects by user ID");
   }
 }
@@ -1348,4 +1432,78 @@ export async function setProjectFramework(projectId: string, frameworkId: string
   } catch (_error) {
     throw new ChatSDKError("bad_request:database", "Failed to set project framework");
   }
+}
+
+// ========== ChatSession Queries ==========
+
+/**
+ * Get chat session by canvas node ID
+ */
+export async function getChatSessionByNodeId({ nodeId }: { nodeId: string }): Promise<ChatSession | null> {
+  try {
+    const [session] = await db.select().from(chatSession).where(eq(chatSession.canvasNodeId, nodeId)).limit(1);
+    return session || null;
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to get chat session");
+  }
+}
+
+/**
+ * Create new chat session for canvas node
+ */
+export async function createChatSession({
+  projectId,
+  canvasNodeId,
+  userId,
+}: {
+  projectId: string;
+  canvasNodeId: string;
+  userId: string;
+}): Promise<ChatSession> {
+  try {
+    const sessionId = generateUUID();
+    const now = new Date();
+
+    // Create both ChatSession and corresponding Chat record
+    // Messages will reference the Chat record via chatId
+    await db.transaction(async (tx) => {
+      // Create Chat record with same ID as ChatSession
+      await tx.insert(chat).values({
+        id: sessionId,
+        userId,
+        title: "Canvas Chat", // Default title
+        visibility: "private",
+        createdAt: now,
+      });
+
+      // Create ChatSession record
+      await tx.insert(chatSession).values({
+        id: sessionId,
+        projectId,
+        canvasNodeId,
+        userId,
+        createdAt: now,
+      });
+    });
+
+    // Return the created session
+    const [newSession] = await db
+      .select()
+      .from(chatSession)
+      .where(eq(chatSession.id, sessionId));
+
+    return newSession;
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to create chat session");
+  }
+}
+
+/**
+ * Get messages by chat session ID
+ * Reuses the same message table structure as regular chats
+ */
+export async function getMessagesByChatSessionId({ id }: { id: string }): Promise<Array<DBMessage>> {
+  // ChatSession and Chat both use the same Message_v2 table with chatId foreign key
+  // So we can reuse the existing getMessagesByChatId function
+  return getMessagesByChatId({ id });
 }

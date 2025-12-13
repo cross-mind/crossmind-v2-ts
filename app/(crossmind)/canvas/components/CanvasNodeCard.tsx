@@ -40,8 +40,8 @@ function ChildNodeCard({
   onAddChild: (node: CanvasNode) => void;
   onDelete: (node: CanvasNode) => void;
   onMoveToZone?: (node: CanvasNode, zoneKey: string) => void;
-  overNodeId: string | null;
-  dropPosition: "top" | "bottom" | "center" | null;
+  overNodeId?: string | null;
+  dropPosition?: "top" | "bottom" | "center" | null;
 }) {
   // 子节点也可以被拖动
   const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({

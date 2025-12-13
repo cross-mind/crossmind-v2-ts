@@ -1,6 +1,8 @@
 import type { InferSelectModel } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   foreignKey,
   index,
   json,
@@ -224,55 +226,62 @@ export const membership = pgTable(
 export type Membership = InferSelectModel<typeof membership>;
 
 // Canvas Nodes (Extended schema for production features)
-export const canvasNode = pgTable("CanvasNode", {
-  id: uuid("id").primaryKey().notNull().defaultRandom(),
-  projectId: uuid("projectId")
-    .notNull()
-    .references(() => project.id, { onDelete: "cascade" }),
+export const canvasNode = pgTable(
+  "CanvasNode",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    projectId: uuid("projectId")
+      .notNull()
+      .references(() => project.id, { onDelete: "cascade" }),
 
-  // Core fields
-  title: text("title").notNull(),
-  content: text("content").notNull(),
-  type: varchar("type", { enum: ["document", "idea", "task", "inspiration"] })
-    .notNull()
-    .default("document"),
+    // Core fields
+    title: text("title").notNull(),
+    content: text("content").notNull(),
+    type: varchar("type", { enum: ["document", "idea", "task", "inspiration"] })
+      .notNull()
+      .default("document"),
 
-  // Hierarchy
-  parentId: uuid("parentId").references((): any => canvasNode.id, { onDelete: "cascade" }),
-  children: uuid("children").array(),
-  references: uuid("references").array(),
+    // Hierarchy
+    parentId: uuid("parentId").references((): any => canvasNode.id, { onDelete: "cascade" }),
+    children: uuid("children").array(),
+    references: uuid("references").array(),
 
-  // Multi-framework positioning (stores positions for different frameworks)
-  positions: jsonb("positions"),
+    // Multi-framework positioning (stores positions for different frameworks)
+    positions: jsonb("positions"),
 
-  // Zone affinities (framework-to-zone weights for smart placement)
-  zoneAffinities: jsonb("zoneAffinities"),
+    // Zone affinities (framework-to-zone weights for smart placement)
+    zoneAffinities: jsonb("zoneAffinities"),
 
-  // Tags
-  tags: text("tags").array(),
+    // Tags
+    tags: text("tags").array(),
 
-  // Display order for sorting (used for drag-drop reordering)
-  displayOrder: real("displayOrder").notNull().default(0),
+    // Display order for sorting (used for drag-drop reordering)
+    displayOrder: real("displayOrder").notNull().default(0),
 
-  // Task-specific fields
-  taskStatus: varchar("taskStatus", { enum: ["todo", "in-progress", "done"] }),
-  assigneeId: uuid("assigneeId").references(() => user.id, { onDelete: "set null" }),
-  dueDate: timestamp("dueDate"),
+    // Task-specific fields
+    taskStatus: varchar("taskStatus", { enum: ["todo", "in-progress", "done"] }),
+    assigneeId: uuid("assigneeId").references(() => user.id, { onDelete: "set null" }),
+    dueDate: timestamp("dueDate"),
 
-  // Inspiration-specific fields
-  source: text("source"),
-  capturedAt: timestamp("capturedAt"),
+    // Inspiration-specific fields
+    source: text("source"),
+    capturedAt: timestamp("capturedAt"),
 
-  // Health scoring (premium feature)
-  healthScore: varchar("healthScore"),
-  healthLevel: varchar("healthLevel", { enum: ["critical", "warning", "good", "excellent"] }),
-  healthData: jsonb("healthData"),
+    // Health scoring (premium feature)
+    healthScore: varchar("healthScore"),
+    healthLevel: varchar("healthLevel", { enum: ["critical", "warning", "good", "excellent"] }),
+    healthData: jsonb("healthData"),
 
-  // Metadata
-  createdById: uuid("createdById").references(() => user.id),
-  createdAt: timestamp("createdAt").notNull(),
-  updatedAt: timestamp("updatedAt").notNull(),
-});
+    // Metadata
+    createdById: uuid("createdById").references(() => user.id),
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => ({
+    // Prevent self-reference: parentId cannot equal id
+    noSelfReference: check("no_self_reference", sql`"parentId" IS NULL OR "parentId" != "id"`),
+  }),
+);
 
 export type CanvasNode = InferSelectModel<typeof canvasNode>;
 

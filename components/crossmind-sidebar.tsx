@@ -90,6 +90,15 @@ export function CrossMindSidebar({ user }: { user: User | undefined }) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
   const [isProjectsLoading, setIsProjectsLoading] = useState(true);
+
+  // Debug: Log state changes
+  useEffect(() => {
+    console.log("[Sidebar State] projects changed:", projects.length, projects);
+  }, [projects]);
+
+  useEffect(() => {
+    console.log("[Sidebar State] currentProject changed:", currentProject?.name || "null");
+  }, [currentProject]);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [newProjectDescription, setNewProjectDescription] = useState("");
@@ -99,19 +108,78 @@ export function CrossMindSidebar({ user }: { user: User | undefined }) {
   useEffect(() => {
     async function fetchProjects() {
       try {
-        const response = await fetch("/api/projects");
+        console.log("[Sidebar] Fetching projects...");
+        const response = await fetch("/api/projects", {
+          credentials: "include", // Ensure cookies are sent
+          cache: "no-store", // Disable cache
+        });
+        console.log("[Sidebar] Response status:", response.status);
         if (response.ok) {
           const data = await response.json();
-          setProjects(data.projects || []);
+          console.log("[Sidebar] Received data:", JSON.stringify(data, null, 2));
+          console.log("[Sidebar] Received projects:", data.projects?.length || 0, data.projects);
+
+          const projectsArray = Array.isArray(data.projects) ? data.projects : [];
+          console.log("[Sidebar] Setting projects state:", projectsArray.length, projectsArray);
+          setProjects(projectsArray);
 
           // Set current project
           if (currentProjectId) {
-            const current = data.projects.find((p: Project) => p.id === currentProjectId);
-            setCurrentProject(current || null);
+            const current = projectsArray.find((p: Project) => p.id === currentProjectId);
+            console.log("[Sidebar] Found current project by ID:", current?.name || "null");
+            if (current) {
+              setCurrentProject(current);
+            } else {
+              // URL has projectId but it's not in user's projects
+              console.log("[Sidebar] URL projectId not found in user's projects");
+              if (projectsArray.length > 0) {
+                console.log("[Sidebar] User has projects, using first project instead");
+                setCurrentProject(projectsArray[0]);
+                // Update URL to match the first project
+                router.replace(`/canvas?projectId=${projectsArray[0].id}`);
+              } else {
+                // User has no projects - keep the projectId in URL (they might have access as guest/member)
+                console.log("[Sidebar] User has no projects, but keeping URL projectId (possible guest access)");
+                setCurrentProject(null);
+                // DON'T navigate away - let Canvas page handle the projectId
+              }
+            }
+          } else if (projectsArray.length > 0) {
+            // If no currentProjectId, try to load last accessed project from localStorage
+            let projectIdToUse: string | null = null;
+            if (typeof window !== "undefined") {
+              const lastProjectId = localStorage.getItem("lastProjectId");
+              if (lastProjectId) {
+                const lastProject = projectsArray.find((p: Project) => p.id === lastProjectId);
+                if (lastProject) {
+                  projectIdToUse = lastProjectId;
+                  console.log("[Sidebar] Restored last accessed project from localStorage:", lastProject.name);
+                } else {
+                  console.log("[Sidebar] Last project from localStorage not found, removing from storage");
+                  localStorage.removeItem("lastProjectId");
+                }
+              }
+            }
+
+            // Use last project or first project
+            const targetProject = projectIdToUse
+              ? projectsArray.find((p: Project) => p.id === projectIdToUse) || projectsArray[0]
+              : projectsArray[0];
+
+            console.log("[Sidebar] No currentProjectId, setting project:", targetProject.name);
+            setCurrentProject(targetProject);
+            // Update URL to include the projectId
+            router.replace(`/canvas?projectId=${targetProject.id}`);
+          } else {
+            console.log("[Sidebar] No projects found, clearing current project");
+            setCurrentProject(null);
           }
+        } else {
+          const errorData = await response.json().catch(() => ({}));
+          console.error("[Sidebar] Failed to fetch projects, status:", response.status, errorData);
         }
       } catch (error) {
-        console.error("Failed to fetch projects:", error);
+        console.error("[Sidebar] Failed to fetch projects:", error);
       } finally {
         setIsProjectsLoading(false);
       }
@@ -123,6 +191,11 @@ export function CrossMindSidebar({ user }: { user: User | undefined }) {
   // Switch project
   const handleSwitchProject = (projectId: string) => {
     setOpenMobile(false);
+    // Save last accessed project to localStorage
+    if (typeof window !== "undefined") {
+      localStorage.setItem("lastProjectId", projectId);
+      console.log("[Sidebar] Saved last project to localStorage:", projectId);
+    }
     router.push(`/canvas?projectId=${projectId}`);
   };
 
@@ -220,7 +293,9 @@ export function CrossMindSidebar({ user }: { user: User | undefined }) {
                         <div className="flex flex-col items-start min-w-0 flex-1">
                           <span className="text-sm font-semibold leading-none">CrossMind</span>
                           <span className="text-xs text-muted-foreground truncate w-full">
-                            {currentProject?.name || "Select Project"}
+                            {isProjectsLoading
+                              ? "Loading..."
+                              : currentProject?.name || projects[0]?.name || "Select Project"}
                           </span>
                         </div>
                       </div>
@@ -234,12 +309,14 @@ export function CrossMindSidebar({ user }: { user: User | undefined }) {
                     <DropdownMenuLabel>Projects</DropdownMenuLabel>
                     <DropdownMenuSeparator />
 
-                    {projects.length === 0 ? (
-                      <div className="px-2 py-4 text-center text-sm text-muted-foreground">
-                        No projects yet
-                      </div>
-                    ) : (
-                      projects.map((project) => (
+                    {(() => {
+                      console.log("[Sidebar Dropdown] Rendering projects list, count:", projects.length);
+                      return projects.length === 0 ? (
+                        <div className="px-2 py-4 text-center text-sm text-muted-foreground">
+                          No projects yet
+                        </div>
+                      ) : (
+                        projects.map((project) => (
                         <DropdownMenuItem
                           key={project.id}
                           onClick={() => handleSwitchProject(project.id)}
@@ -261,7 +338,8 @@ export function CrossMindSidebar({ user }: { user: User | undefined }) {
                           )}
                         </DropdownMenuItem>
                       ))
-                    )}
+                    );
+                    })()}
 
                     <DropdownMenuSeparator />
                     <DropdownMenuItem

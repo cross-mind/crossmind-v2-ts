@@ -10,10 +10,13 @@ export async function GET() {
   }
 
   try {
-    const projects = await getProjectsByUserId({ userId: session.user.id as string });
+    const userId = session.user.id as string;
+    console.log("[Projects API] Fetching projects for user:", userId);
+    const projects = await getProjectsByUserId({ userId });
+    console.log("[Projects API] Found projects:", projects.length, projects.map(p => ({ id: p.id, name: p.name })));
     return NextResponse.json({ projects });
   } catch (error) {
-    console.error("Error fetching projects:", error);
+    console.error("[Projects API] Error fetching projects:", error);
     return NextResponse.json({ error: "Failed to fetch projects" }, { status: 500 });
   }
 }

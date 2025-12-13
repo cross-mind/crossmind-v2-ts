@@ -56,6 +56,8 @@ function PureMultimodalInput({
   selectedModelId,
   onModelChange,
   usage,
+  compact = false,
+  mode = "full-page",
 }: {
   chatId: string;
   input: string;
@@ -72,6 +74,8 @@ function PureMultimodalInput({
   selectedModelId: string;
   onModelChange?: (modelId: string) => void;
   usage?: AppUsage;
+  compact?: boolean;
+  mode?: "full-page" | "panel";
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { width } = useWindowSize();
@@ -120,7 +124,10 @@ function PureMultimodalInput({
   const [uploadQueue, setUploadQueue] = useState<string[]>([]);
 
   const submitForm = useCallback(() => {
-    window.history.pushState({}, "", `/chat/${chatId}`);
+    // Only update URL in full-page mode (not in Canvas panel mode)
+    if (mode === "full-page") {
+      window.history.pushState({}, "", `/chat/${chatId}`);
+    }
 
     sendMessage({
       role: "user",
@@ -156,6 +163,7 @@ function PureMultimodalInput({
     width,
     chatId,
     resetHeight,
+    mode,
   ]);
 
   const uploadFile = useCallback(async (file: File) => {
@@ -273,8 +281,8 @@ function PureMultimodalInput({
   }, [handlePaste]);
 
   return (
-    <div className={cn("relative flex w-full flex-col gap-4", className)}>
-      {messages.length === 0 && attachments.length === 0 && uploadQueue.length === 0 && (
+    <div className={cn("relative flex w-full flex-col", compact ? "gap-2" : "gap-4", className)}>
+      {!compact && messages.length === 0 && attachments.length === 0 && uploadQueue.length === 0 && (
         <SuggestedActions
           chatId={chatId}
           selectedVisibilityType={selectedVisibilityType}
@@ -292,7 +300,10 @@ function PureMultimodalInput({
       />
 
       <PromptInput
-        className="rounded-xl border border-border bg-background p-3 shadow-xs transition-all duration-200 focus-within:border-border hover:border-muted-foreground/50"
+        className={cn(
+          "rounded-xl border border-border bg-background shadow-xs transition-all duration-200 focus-within:border-border hover:border-muted-foreground/50",
+          compact ? "p-2" : "p-3"
+        )}
         onSubmit={(event) => {
           event.preventDefault();
           if (status !== "ready") {
@@ -341,7 +352,7 @@ function PureMultimodalInput({
             className="grow resize-none border-0! border-none! bg-transparent p-2 text-sm outline-none ring-0 [-ms-overflow-style:none] [scrollbar-width:none] placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 [&::-webkit-scrollbar]:hidden"
             data-testid="multimodal-input"
             disableAutoResize={true}
-            maxHeight={200}
+            maxHeight={compact ? 120 : 200}
             minHeight={44}
             onChange={handleInput}
             placeholder="Send a message..."
