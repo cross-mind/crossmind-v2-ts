@@ -10,6 +10,7 @@ import type { CanvasNode, ThinkingFramework } from "../canvas-data";
 import { calculateNewDisplayOrder, calculateDropPosition, isDescendant, type DropPosition } from "../lib/drag-drop-helpers";
 import { toast } from "sonner";
 import { mutate } from "swr";
+import { canvasApi, ApiError } from "@/lib/api/canvas-api";
 
 export function useCanvasDragDrop({
   nodes,
@@ -98,17 +99,7 @@ export function useCanvasDragDrop({
             });
 
             // 变成根节点
-            const response = await fetch(`/api/canvas/${draggedNode.id}`, {
-              method: "PATCH",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ parentId: null }),
-            });
-
-            if (!response.ok) {
-              const error = await response.json();
-              console.error("[DragDrop] API error:", error);
-              throw new Error("Failed to detach node");
-            }
+            await canvasApi.nodes.update(draggedNode.id, { parentId: null });
 
             toast.success("Node detached from parent");
             await mutate(`/api/canvas?projectId=${projectId}`);
@@ -261,20 +252,10 @@ export function useCanvasDragDrop({
           console.log("[DragDrop] Affinity update successful");
 
           // Update displayOrder and parentId separately
-          const response = await fetch(`/api/canvas/${draggedNode.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              displayOrder: newDisplayOrder,
-              parentId: null, // 确保变成根节点
-            }),
+          await canvasApi.nodes.update(draggedNode.id, {
+            displayOrder: newDisplayOrder,
+            parentId: null, // 确保变成根节点
           });
-
-          if (!response.ok) {
-            const error = await response.json();
-            console.error("[DragDrop] API error:", error);
-            throw new Error("Failed to update node position");
-          }
 
           toast.success(`Moved to ${targetZone.name}`);
           await mutate(`/api/canvas?projectId=${projectId}`);
@@ -388,17 +369,7 @@ export function useCanvasDragDrop({
         });
 
         // 调用 API 更新（只更新一个节点）
-        const response = await fetch(`/api/canvas/${draggedNode.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(updates),
-        });
-
-        if (!response.ok) {
-          const error = await response.json();
-          console.error("[DragDrop] API error:", error);
-          throw new Error("Failed to update node");
-        }
+        await canvasApi.nodes.update(draggedNode.id, updates);
 
         toast.success("Node moved");
 

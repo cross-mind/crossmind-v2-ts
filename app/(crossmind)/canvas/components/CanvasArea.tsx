@@ -4,61 +4,49 @@ import React, { useLayoutEffect } from "react";
 import { StrategicZones } from "./StrategicZones";
 import { CanvasNodeCard } from "./CanvasNodeCard";
 import { CanvasControls } from "./CanvasControls";
-import { StageFilter, type StageFilterType } from "./StageFilter";
+import { StageFilter } from "./StageFilter";
 import { TagFilter } from "./TagFilter";
 import { HiddenNodesDropdown } from "./HiddenNodesDropdown";
 import { CanvasBackgroundContextMenu } from "./CanvasBackgroundContextMenu";
 import type { CanvasNode, ThinkingFramework } from "../canvas-data";
-import type { NODE_TYPE_CONFIG } from "../node-type-config";
 import type { DropPosition } from "../lib/drag-drop-helpers";
-import type { CanvasSuggestion } from "@/lib/db/schema";
+import { useCanvas } from "../core/CanvasContext";
+import { useFilter } from "../features/filters/FilterContext";
+import { useSuggestions } from "../features/suggestions/SuggestionContext";
 
 interface CanvasAreaProps {
+  // Refs (must stay as props)
   canvasRef: React.RefObject<HTMLDivElement>;
   transformRef: React.RefObject<HTMLDivElement>;
   zonesContainerRef: React.RefObject<HTMLDivElement>;
   nodesContainerRef: React.RefObject<HTMLDivElement>;
+  nodeRefs: React.MutableRefObject<Map<string, HTMLDivElement>>;
+
+  // Zoom/Pan state (from useZoomPan)
   canvasOffset: { x: number; y: number };
   scale: number;
+
+  // UI state (local to page)
   showStrategicZones: boolean;
-  layoutCalculated: boolean;
-  currentFramework: ThinkingFramework | null;
-  zoneBounds: Record<string, { width: number; height: number }>;
   getDynamicZoneConfigs: () => Record<string, { startX: number; startY: number; columnCount: number; nodeIds: string[] }>;
-  allNodes: CanvasNode[];
-  visibleNodes: CanvasNode[];
-  selectedNode: CanvasNode | null;
-  nodeTypeConfig: typeof NODE_TYPE_CONFIG;
-  stageFilter: StageFilterType;
-  nodeRefs: React.MutableRefObject<Map<string, HTMLDivElement>>;
-  matchesFilter: (node: CanvasNode) => boolean;
+
+  // Event handlers (specific to page)
   onCanvasMouseDown: (e: React.MouseEvent) => void;
   onNodeClick: (node: CanvasNode, e: React.MouseEvent) => void;
   onOpenAIChat: (node: CanvasNode) => void;
   onAddChild: (parentNode: CanvasNode) => void;
-  onDelete: (node: CanvasNode) => void;
-  onMoveToZone?: (node: CanvasNode, zoneKey: string) => void;
-  onHideNode?: (node: CanvasNode) => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onReset: () => void;
-  onFilterChange: (filter: StageFilterType) => void;
-  selectedTags: string[];
-  onTagsChange: (tags: string[]) => void;
-  onRestoreNode: (nodeId: string) => void;
-  onSelectedNodeChange: (node: CanvasNode | null) => void;
-  onWheel?: (e: WheelEvent) => void; // Optional wheel handler from useZoomPan
-  onMouseMove?: (e: MouseEvent) => void; // Optional mouse move handler
-  onMouseUp?: () => void; // Optional mouse up handler
-  onBackgroundContextMenu?: (x: number, y: number) => void; // Optional background context menu handler
-  // Drag-drop state
+  onWheel?: (e: WheelEvent) => void;
+  onMouseMove?: (e: MouseEvent) => void;
+  onMouseUp?: () => void;
+  onBackgroundContextMenu?: (x: number, y: number) => void;
+
+  // Drag-drop state (from useDragDrop)
   activeNodeId?: string | null;
   overNodeId?: string | null;
   dropPosition?: DropPosition;
-  // Suggestions
-  suggestionsByNode: Map<string, CanvasSuggestion[]>;
-  onApplySuggestion: (suggestionId: string) => void;
-  onDismissSuggestion: (suggestionId: string) => void;
 }
 
 export function CanvasArea({
@@ -66,35 +54,18 @@ export function CanvasArea({
   transformRef,
   zonesContainerRef,
   nodesContainerRef,
+  nodeRefs,
   canvasOffset,
   scale,
   showStrategicZones,
-  layoutCalculated,
-  currentFramework,
-  zoneBounds,
   getDynamicZoneConfigs,
-  allNodes,
-  visibleNodes,
-  selectedNode,
-  nodeTypeConfig,
-  stageFilter,
-  nodeRefs,
-  matchesFilter,
   onCanvasMouseDown,
   onNodeClick,
   onOpenAIChat,
   onAddChild,
-  onDelete,
-  onMoveToZone,
-  onHideNode,
   onZoomIn,
   onZoomOut,
   onReset,
-  onFilterChange,
-  selectedTags,
-  onTagsChange,
-  onRestoreNode,
-  onSelectedNodeChange,
   onWheel,
   onMouseMove,
   onMouseUp,
@@ -102,10 +73,36 @@ export function CanvasArea({
   activeNodeId,
   overNodeId,
   dropPosition,
-  suggestionsByNode,
-  onApplySuggestion,
-  onDismissSuggestion,
 }: CanvasAreaProps) {
+  // Access state from Context
+  const {
+    nodes: allNodes,
+    selectedNode,
+    layoutCalculated,
+    currentFramework,
+    zoneBounds,
+    nodeTypeConfig,
+    selectNode,
+    deleteNode,
+    moveToZone,
+    hideNode,
+    restoreNode,
+  } = useCanvas();
+
+  const {
+    visibleNodes,
+    stageFilter,
+    selectedTags,
+    setStageFilter,
+    setSelectedTags,
+    matchesFilter,
+  } = useFilter();
+
+  const {
+    suggestionsByNode,
+    applySuggestion,
+    dismissSuggestion,
+  } = useSuggestions();
   // Setup event listeners in this component where refs are actually attached
   useLayoutEffect(() => {
     const container = canvasRef.current;
@@ -149,7 +146,7 @@ export function CanvasArea({
       ref={canvasRef}
       className="flex-1 overflow-hidden relative bg-muted/5"
       onMouseDown={onCanvasMouseDown}
-      onClick={() => onSelectedNodeChange(null)}
+      onClick={() => selectNode(null)}
       style={{ cursor: "grab" }}
     >
       {/* Fixed grid background - outside transform container */}
@@ -206,9 +203,9 @@ export function CanvasArea({
               onNodeClick={onNodeClick}
               onOpenAIChat={onOpenAIChat}
               onAddChild={onAddChild}
-              onDelete={onDelete}
-              onMoveToZone={onMoveToZone}
-              onHideNode={onHideNode}
+              onDelete={deleteNode}
+              onMoveToZone={moveToZone}
+              onHideNode={hideNode}
               onNodeRefSet={(id, el) => {
                 if (el) {
                   nodeRefs.current.set(id, el);
@@ -217,8 +214,8 @@ export function CanvasArea({
               matchesFilter={matchesFilter}
               stageFilter={stageFilter}
               nodeSuggestions={suggestionsByNode.get(node.id) || []}
-              onApplySuggestion={onApplySuggestion}
-              onDismissSuggestion={onDismissSuggestion}
+              onApplySuggestion={applySuggestion}
+              onDismissSuggestion={dismissSuggestion}
               overNodeId={overNodeId}
               dropPosition={dropPosition}
             />
@@ -241,12 +238,12 @@ export function CanvasArea({
       <div className="absolute top-4 left-4 flex items-center gap-2">
         {/* Stage Filter */}
         <div className="bg-background/90 backdrop-blur border border-border rounded-lg shadow-lg">
-          <StageFilter currentFilter={stageFilter} onFilterChange={onFilterChange} />
+          <StageFilter currentFilter={stageFilter} onFilterChange={setStageFilter} />
         </div>
 
         {/* Tag Filter */}
         <div className="bg-background/90 backdrop-blur border border-border rounded-lg shadow-lg">
-          <TagFilter nodes={allNodes} selectedTags={selectedTags} onTagsChange={onTagsChange} />
+          <TagFilter nodes={allNodes} selectedTags={selectedTags} onTagsChange={setSelectedTags} />
         </div>
 
         {/* Hidden Nodes Dropdown */}
@@ -254,7 +251,7 @@ export function CanvasArea({
           <HiddenNodesDropdown
             nodes={allNodes}
             currentFrameworkId={currentFramework?.id || null}
-            onRestoreNode={onRestoreNode}
+            onRestoreNode={restoreNode}
           />
         </div>
       </div>

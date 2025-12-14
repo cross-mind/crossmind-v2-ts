@@ -88,6 +88,9 @@ export interface AISuggestion {
   type: "add-node" | "add-tag" | "refine-content" | "content-suggestion" | "health-issue";
   title: string;
   description: string;
+  nodeId?: string;
+  priority?: "low" | "medium" | "high" | "critical";
+  impactScore?: number;
 }
 
 // ============================================

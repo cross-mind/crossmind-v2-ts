@@ -1,14 +1,6 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import {
-  Calendar,
-  Clock,
-  Sparkles,
-  Tag,
-  User,
-} from "lucide-react";
 import React from "react";
 import { HealthPopover } from "./HealthPopover";
 import { NodeHealthBadge } from "./NodeHealthBadge";
@@ -17,6 +9,9 @@ import { NodeContextMenu } from "./NodeContextMenu";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { NodeSuggestionBadge } from "./NodeSuggestionBadge";
 import { SuggestionPopover } from "./SuggestionPopover";
+import { NodeCardHeader } from "./NodeCardHeader";
+import { NodeCardTypeContent } from "./NodeCardTypeContent";
+import { NodeCardTags } from "./NodeCardTags";
 import type { CanvasNode, ThinkingFramework } from "../canvas-data";
 import type { CanvasSuggestion } from "@/lib/db/schema";
 
@@ -301,79 +296,10 @@ export function CanvasNodeCard({
         <NodeHealthBadge node={node} />
 
         {/* Header */}
-        <div className="flex items-start gap-2 mb-3">
-          <div
-            className={cn(
-              "p-2 rounded-lg shrink-0",
-              config.color.replace("bg-", "bg-") + "/10",
-            )}
-          >
-            <Icon className={cn("h-4 w-4", config.color.replace("bg-", "text-"))} />
-          </div>
-
-          <div className="flex-1 min-w-0 pr-20">
-            <h3 className="font-medium text-sm leading-snug mb-1">{node.title}</h3>
-            {node.children && node.children.length > 0 && (
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <Badge
-                  variant="outline"
-                  className="text-[10px] font-normal bg-primary/5 text-primary border-primary/20"
-                >
-                  {node.children.length} children
-                </Badge>
-              </div>
-            )}
-          </div>
-        </div>
+        <NodeCardHeader node={node} config={config} />
 
         {/* Type-specific content */}
-        {node.type === "task" && (
-          <div className="mb-3 space-y-2">
-            <div className="flex items-center gap-2 text-xs">
-              <div
-                className={cn(
-                  "px-2 py-0.5 rounded text-[10px] font-medium",
-                  node.taskStatus === "done" && "bg-green-500/10 text-green-600",
-                  node.taskStatus === "in-progress" &&
-                    "bg-blue-500/10 text-blue-600",
-                  node.taskStatus === "todo" && "bg-gray-500/10 text-gray-600",
-                )}
-              >
-                {node.taskStatus === "done" && "✓ 已完成"}
-                {node.taskStatus === "in-progress" && "⟳ 进行中"}
-                {node.taskStatus === "todo" && "○ 待开始"}
-              </div>
-              {node.assignee && (
-                <div className="flex items-center gap-1 text-muted-foreground">
-                  <User className="h-3 w-3" />
-                  {node.assignee}
-                </div>
-              )}
-            </div>
-            {node.dueDate && (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Calendar className="h-3 w-3" />
-                截止 {node.dueDate instanceof Date ? node.dueDate.toLocaleDateString() : node.dueDate}
-              </div>
-            )}
-          </div>
-        )}
-
-        {node.type === "inspiration" && (node.source || node.capturedAt) && (
-          <div className="mb-3 space-y-1">
-            {node.source && (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                <span>📚 {node.source}</span>
-              </div>
-            )}
-            {node.capturedAt && (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Clock className="h-3 w-3" />
-                {node.capturedAt instanceof Date ? node.capturedAt.toLocaleDateString() : node.capturedAt}
-              </div>
-            )}
-          </div>
-        )}
+        <NodeCardTypeContent node={node} />
 
         {/* Content Preview */}
         <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed mb-3">
@@ -384,36 +310,7 @@ export function CanvasNodeCard({
         {renderChildren(node.id)}
 
         {/* Tags */}
-        {node.tags && node.tags.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-4">
-            {node.tags.slice(0, 3).map((tag) => {
-              const [namespace, value] = tag.split("/");
-              const tagColors: Record<string, string> = {
-                type: "bg-blue-500/10 text-blue-600",
-                stage: "bg-green-500/10 text-green-600",
-                priority: "bg-orange-500/10 text-orange-600",
-              };
-
-              return (
-                <div
-                  key={tag}
-                  className={cn(
-                    "inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium",
-                    tagColors[namespace] || "bg-muted text-muted-foreground",
-                  )}
-                >
-                  <Tag className="h-2.5 w-2.5" />
-                  {value}
-                </div>
-              );
-            })}
-            {node.tags.length > 3 && (
-              <div className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground">
-                +{node.tags.length - 3}
-              </div>
-            )}
-          </div>
-        )}
+        <NodeCardTags node={node} />
 
         </div>
       </NodeContextMenu>

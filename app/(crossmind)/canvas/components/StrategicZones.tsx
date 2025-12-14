@@ -25,7 +25,9 @@ export function StrategicZones({
   getDynamicZoneConfigs,
   overNodeId,
 }: StrategicZonesProps) {
-  if (!showStrategicZones || !currentFramework) return null;
+  if (!showStrategicZones || !currentFramework) {
+    return null;
+  }
 
   return (
     <div
@@ -47,6 +49,11 @@ export function StrategicZones({
           // Get zone configuration with grid position
           const config = zoneConfigs[zone.id];
           const zoneBound = zoneBounds[zone.id];
+
+          // Skip if no config available
+          if (!config) {
+            return null;
+          }
 
           // Check if this zone is being hovered over
           const isOver = overNodeId === `zone-${zone.id}`;

@@ -19,14 +19,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   getAllNodeContents,
-  NODE_WIDTH,
-  VERTICAL_GAP,
-  COLUMN_GAP,
-  MOCK_SUGGESTIONS,
   type NodeContent,
   type CanvasNode,
-  type FeedActivity,
-  type Comment,
   type AISuggestion,
   type ThinkingFramework,
 } from "./canvas-data";
@@ -35,17 +29,14 @@ import { useProjectFramework } from "@/hooks/use-project-framework";
 import { useNodeAffinities } from "@/hooks/use-node-affinities";
 import { SubscriptionDebugger } from "@/components/SubscriptionDebugger";
 import { NodeDetailPanel } from "./components/NodeDetailPanel";
-import { type StageFilterType } from "./components/StageFilter";
 import { CanvasHeader } from "./components/CanvasHeader";
 import { CanvasArea } from "./components/CanvasArea";
+import { CanvasRoot } from "./components/CanvasRoot";
 import { NODE_TYPE_CONFIG } from "./node-type-config";
-import { extractStageFromTags } from "./lib/canvas-helpers";
 import { useCanvasNodes, useCanvasComments, useCanvasActivities } from "@/hooks/use-canvas-nodes";
 import { useCanvasSuggestionsByFramework } from "@/hooks/use-canvas-suggestions";
-import type { CanvasNode as DBCanvasNode, CanvasNodeComment, CanvasNodeActivity, CanvasSuggestion } from "@/lib/db/schema";
-import { NodeDialog } from "./components/NodeDialog";
-import { TagDialog } from "./components/TagDialog";
-import { QuickNodeDialog } from "./components/QuickNodeDialog";
+import type { CanvasNode as DBCanvasNode, CanvasSuggestion } from "@/lib/db/schema";
+import { CanvasDialogs } from "./components/CanvasDialogs";
 import { useCanvasActions } from "./hooks/useCanvasActions";
 import { useZoomPan } from "./hooks/useZoomPan";
 import { useZoneDetection } from "./hooks/useZoneDetection";
@@ -54,64 +45,24 @@ import { useCanvasDragDrop } from "./hooks/useCanvasDragDrop";
 import { useNodePositions } from "@/hooks/use-node-positions";
 import { DndContext, DragOverlay, rectIntersection } from "@dnd-kit/core";
 import { useSession } from "next-auth/react";
+import { canvasApi, ApiError } from "@/lib/api/canvas-api";
+import { toast } from "sonner";
 
-/**
- * Transform database CanvasNodeComment to UI Comment format
- * Handles user lookup and timestamp formatting
- */
-function mapCommentToUI(comment: CanvasNodeComment, users: Map<string, string>): Comment {
-  const formatTimestamp = (date: Date | string): string => {
-    const dateObj = typeof date === 'string' ? new Date(date) : date;
-    const now = new Date();
-    const diffMs = now.getTime() - dateObj.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return "just now";
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return dateObj.toLocaleDateString();
-  };
-
-  return {
-    id: comment.id,
-    user: comment.authorId ? (users.get(comment.authorId) || comment.authorId.slice(0, 8)) : "Unknown",
-    timestamp: formatTimestamp(comment.createdAt),
-    content: comment.content,
-  };
-}
-
-/**
- * Transform database CanvasNodeActivity to UI FeedActivity format
- * Handles user lookup and timestamp formatting
- */
-function mapActivityToUI(activity: CanvasNodeActivity, users: Map<string, string>): FeedActivity {
-  const formatTimestamp = (date: Date | string): string => {
-    const dateObj = typeof date === 'string' ? new Date(date) : date;
-    const now = new Date();
-    const diffMs = now.getTime() - dateObj.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return "just now";
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return dateObj.toLocaleDateString();
-  };
-
-  return {
-    id: activity.id,
-    type: activity.type as "created" | "updated" | "status_changed" | "tag_added" | "comment_added",
-    user: activity.userId ? (users.get(activity.userId) || activity.userId.slice(0, 8)) : "System",
-    timestamp: formatTimestamp(activity.createdAt),
-    description: activity.description,
-    details: activity.details || undefined,
-  };
-}
+// Import data transformers and layout engine from centralized modules
+import {
+  mapCommentToUI,
+  mapActivityToUI,
+  dbNodesToNodeContents,
+  type UIComment as Comment,
+  type UIFeedActivity as FeedActivity,
+} from "./core/DataTransformers";
+import {
+  calculateNodePositions,
+  calculateZoneConfigs,
+  hasPersistedPositions,
+  applyPersistedPositions,
+  LAYOUT_CONSTANTS,
+} from "./core/LayoutEngine";
 
 export default function CanvasPage() {
   // Get projectId from URL
@@ -131,19 +82,10 @@ export default function CanvasPage() {
   // Get session for user info
   const { data: session } = useSession();
 
-  // Convert database nodes to Canvas format
+  // Convert database nodes to Canvas format using centralized transformer
   const nodeContents = useMemo<NodeContent[]>(() => {
-    console.log('[Canvas Page] Database nodes:', {
-      hasDbNodes: !!dbNodes,
-      nodeCount: dbNodes?.length || 0,
-      projectId,
-      isLoading,
-      isError
-    });
-
     // Don't fallback to mock data if still loading (no data and no error yet)
     if (!dbNodes && !isError) {
-      console.log('[Canvas Page] Still loading, returning empty array');
       return [];
     }
 
@@ -152,25 +94,8 @@ export default function CanvasPage() {
       return getAllNodeContents();
     }
 
-    // If API returned empty array after loading, keep it empty (don't fallback to mock)
-    if (!dbNodes || dbNodes.length === 0) {
-      return [];
-    }
-    // Map database nodes to NodeContent format
-    return dbNodes.map((dbNode) => ({
-      id: dbNode.id,
-      title: dbNode.title,
-      content: dbNode.content,
-      type: dbNode.type as "document" | "idea" | "task" | "inspiration",
-      parentId: dbNode.parentId || undefined,  // Include parentId for hierarchical structure
-      tags: dbNode.tags || [],
-      stage: extractStageFromTags(dbNode.tags),
-      health: dbNode.healthScore ? Number.parseInt(dbNode.healthScore) : undefined,
-      references: dbNode.references || [],
-      children: dbNode.children || [],
-      displayOrder: dbNode.displayOrder, // Include displayOrder for drag-drop
-      hiddenInFrameworks: (dbNode as any).hiddenInFrameworks || {}, // Include hiddenInFrameworks for filtering
-    }));
+    // Use centralized transformer
+    return dbNodesToNodeContents(dbNodes);
   }, [dbNodes, projectId, isLoading, isError]);
 
   // Dynamic layout state
@@ -185,14 +110,7 @@ export default function CanvasPage() {
   const prevAffinityHashRef = useRef<string>('');
   const prevProjectIdRef = useRef<string | null>(null);
 
-  // Zone layout constants (moved outside getDynamicZoneConfigs for reuse)
-  const ZONE_WIDTH = 800;
-  const ZONE_GAP = 20;
-  const ZONE_ROW_HEIGHT = 1000;
-
   const [selectedNode, setSelectedNode] = useState<CanvasNode | null>(null);
-  const [stageFilter, setStageFilter] = useState<StageFilterType>("all");
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
   // Hook to fetch comments for selected node
   const {
@@ -266,11 +184,6 @@ export default function CanvasPage() {
   // Reset state when projectId changes
   useEffect(() => {
     if (prevProjectIdRef.current !== null && prevProjectIdRef.current !== projectId) {
-      console.log('[Canvas Page] Project changed, resetting state', {
-        prevProjectId: prevProjectIdRef.current,
-        newProjectId: projectId,
-      });
-
       // Reset all node-related state
       setNodes([]);
       setSelectedNode(null);
@@ -309,11 +222,6 @@ export default function CanvasPage() {
 
     // If framework changed, save current positions immediately and reset layout
     if (prevFrameworkIdRef.current && prevFrameworkIdRef.current !== currentFrameworkId) {
-      console.log('[Framework Switch] Saving positions for old framework and resetting layout', {
-        oldFramework: prevFrameworkIdRef.current,
-        newFramework: currentFrameworkId,
-      });
-
       // Save current positions immediately (don't wait for debounce)
       saveImmediately();
 
@@ -356,122 +264,10 @@ export default function CanvasPage() {
     onNodeCreated: (nodeId) => onNodeCreatedRef.current?.(nodeId),
   });
 
-  // Generate dynamic zone configs based on current framework
+  // Generate dynamic zone configs using LayoutEngine
   const getDynamicZoneConfigs = useCallback(() => {
     if (!currentFramework) return {};
-
-
-    const configs: Record<string, { startX: number; startY: number; columnCount: number; nodeIds: string[] }> = {};
-
-    const zoneCount = currentFramework.zones.length;
-
-    // Smart layout: if more than 5 zones, use grid layout
-    let zonesPerRow = zoneCount;
-    let rowCount = 1;
-
-    if (zoneCount > 5) {
-      zonesPerRow = zoneCount <= 8 ? 4 : 3; // 6-8 zones: 4 per row, 9+ zones: 3 per row
-      rowCount = Math.ceil(zoneCount / zonesPerRow);
-    }
-
-    // Initialize zone configs with grid positions
-    currentFramework.zones.forEach((zone, index) => {
-      const row = Math.floor(index / zonesPerRow);
-      const col = index % zonesPerRow;
-
-      configs[zone.id] = {
-        startX: ZONE_GAP + col * (ZONE_WIDTH + ZONE_GAP),
-        startY: ZONE_GAP + row * ZONE_ROW_HEIGHT, // Use larger vertical spacing
-        columnCount: 2,
-        nodeIds: []
-      };
-    });
-
-    // Track nodes with and without zone affinities
-    const assignedNodeIds = new Set<string>();
-
-    // Assign nodes that have affinity data to their best matching zone
-    nodeContents.forEach(node => {
-      // Skip child nodes (they are rendered inside parent nodes)
-      if (node.parentId) return;
-
-      const affinities = nodeAffinities[node.id]; // Get from database
-
-      console.log('[Layout] Processing node for zone assignment:', {
-        nodeId: node.id,
-        nodeTitle: node.title,
-        hasAffinities: !!affinities,
-        affinitiesKeys: affinities ? Object.keys(affinities) : [],
-        affinities: affinities,
-      });
-
-      if (affinities && Object.keys(affinities).length > 0) {
-        // Find zone with highest affinity weight
-        let bestZone: string | null = null;
-        let maxWeight = 0;
-
-        for (const [zoneKey, weight] of Object.entries(affinities)) {
-          const numWeight = weight as number;
-
-          // Match zone by zoneKey (affinities are keyed by zoneKey from database)
-          const zone = currentFramework.zones.find(z => z.zoneKey === zoneKey);
-
-          if (zone && numWeight > maxWeight && configs[zone.id]) {
-            maxWeight = numWeight;
-            bestZone = zone.id;
-          }
-        }
-
-        if (bestZone) {
-          configs[bestZone].nodeIds.push(node.id);
-          assignedNodeIds.add(node.id);
-        }
-        // If affinity exists but no matching zone in current framework,
-        // node will be unassigned (not added to any zone)
-      } else {
-        // FALLBACK: For nodes without affinities, assign to first zone as default
-        // This ensures all root nodes are visible in the canvas
-        const firstZone = currentFramework.zones[0];
-        if (firstZone && configs[firstZone.id]) {
-          console.log('[Layout] Assigning node without affinities to first zone (fallback):', {
-            nodeId: node.id,
-            nodeTitle: node.title,
-            zoneId: firstZone.id,
-          });
-          configs[firstZone.id].nodeIds.push(node.id);
-          assignedNodeIds.add(node.id);
-        }
-      }
-    });
-
-    // Count root nodes separately
-    const rootNodeCount = nodeContents.filter(n => !n.parentId).length;
-    const unassignedRootCount = rootNodeCount - assignedNodeIds.size;
-
-    // Debug: Log all zone configs
-    const zoneConfigsSummary = Object.entries(configs).map(([zoneId, config]) => {
-      const zone = currentFramework.zones.find(z => z.id === zoneId);
-      return {
-        zoneName: zone?.name || zoneId,
-        zoneId,
-        nodeCount: config.nodeIds.length,
-        nodeIds: config.nodeIds.slice(0, 5), // Only show first 5 to avoid log spam
-        allNodeIds: config.nodeIds, // Full list for debugging
-      };
-    });
-
-    console.log('[Layout] Zone assignment:', {
-      frameworkId: currentFramework.id,
-      frameworkName: currentFramework.name,
-      totalNodes: nodeContents.length,
-      rootNodes: rootNodeCount,
-      childNodes: nodeContents.length - rootNodeCount,
-      assignedNodes: assignedNodeIds.size,
-      unassignedRootNodes: unassignedRootCount,
-      zoneConfigs: zoneConfigsSummary,
-    });
-
-    return configs;
+    return calculateZoneConfigs(currentFramework, nodeContents, nodeAffinities);
   }, [currentFramework, nodeContents, nodeAffinities]);
 
   // Zone detection hook for quick node creation
@@ -480,12 +276,8 @@ export default function CanvasPage() {
   // Handle background context menu - create node at clicked position
   const handleBackgroundContextMenu = useCallback(
     (x: number, y: number) => {
-      console.log('[Background Context Menu] Clicked at Canvas coordinates:', { x, y });
-
       // Detect which zone contains the click
       const zone = detectZone(x, y);
-
-      console.log('[Background Context Menu] Detected zone:', zone);
 
       // Set detected zone
       setQuickNodeZone(zone);
@@ -499,21 +291,12 @@ export default function CanvasPage() {
   // Handle quick node creation with displayOrder calculation
   const handleQuickNodeSubmit = useCallback(
     (data: { title: string; type: "document" | "idea" | "task" | "inspiration" }) => {
-      console.log('[Quick Node] Creating node', {
-        data,
-        zone: quickNodeZone,
-        frameworkId: currentFramework?.id,
-        nodeContentsCount: nodeContents?.length
-      });
-
       // Calculate displayOrder for the zone using nodeContents (database data)
       const displayOrder = calculateNextDisplayOrderInZone(
         nodeContents || [],
         currentFramework?.id || null,
         quickNodeZone?.zoneKey || null
       );
-
-      console.log('[Quick Node] Calculated displayOrder:', displayOrder);
 
       // Create the node
       handleQuickCreateNode(data, displayOrder);
@@ -669,15 +452,7 @@ export default function CanvasPage() {
   // Suggestion handlers
   const handleApplySuggestion = useCallback(async (suggestionId: string) => {
     try {
-      const response = await fetch(`/api/canvas/suggestions/${suggestionId}/apply`, {
-        method: "POST",
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to apply suggestion");
-      }
-
-      const result = await response.json();
+      const result = await canvasApi.suggestions.apply(suggestionId);
 
       // Refresh data first for all types
       await Promise.all([
@@ -717,13 +492,7 @@ export default function CanvasPage() {
 
   const handleDismissSuggestion = useCallback(async (suggestionId: string) => {
     try {
-      const response = await fetch(`/api/canvas/suggestions/${suggestionId}/dismiss`, {
-        method: "POST",
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to dismiss suggestion");
-      }
+      await canvasApi.suggestions.dismiss(suggestionId);
 
       // Refresh suggestions list
       await mutateSuggestions();
@@ -744,42 +513,45 @@ export default function CanvasPage() {
       setElapsedTime(Math.floor((Date.now() - startTime) / 1000));
     }, 1000);
 
+    const controller = new AbortController();
+
     // Set timeout (60 seconds)
     const timeoutId = setTimeout(() => {
+      controller.abort();
       if (generationTimerRef.current) {
         clearInterval(generationTimerRef.current);
         generationTimerRef.current = null;
       }
       setIsGenerating(false);
       console.error("[Canvas] Suggestion generation timed out after 60 seconds");
+      toast.error("分析超时", {
+        description: "AI 分析时间过长（超过 60 秒），请稍后重试。",
+      });
     }, 60000);
 
     try {
-      const controller = new AbortController();
-      const fetchTimeout = setTimeout(() => controller.abort(), 60000);
-
-      const response = await fetch("/api/canvas/suggestions/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      await canvasApi.suggestions.generate(
+        {
           projectId,
           frameworkId: currentFramework.id,
-        }),
-        signal: controller.signal,
-      });
+        },
+        controller.signal
+      );
 
-      clearTimeout(fetchTimeout);
       clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        throw new Error("Failed to generate suggestions");
-      }
 
       // Refresh suggestions list
       await mutateSuggestions();
     } catch (error) {
       console.error("[Canvas] Failed to generate suggestions:", error);
       clearTimeout(timeoutId);
+
+      // Only show error toast if not aborted (timeout already showed toast)
+      if (error instanceof Error && error.name !== 'AbortError') {
+        toast.error("分析失败", {
+          description: "无法生成 AI 建议，请稍后重试。",
+        });
+      }
     } finally {
       if (generationTimerRef.current) {
         clearInterval(generationTimerRef.current);
@@ -825,19 +597,17 @@ export default function CanvasPage() {
 
     try {
       // Call API first
-      const response = await fetch(`/api/canvas/${node.id}`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to delete node");
-      }
+      await canvasApi.nodes.delete(node.id);
 
       // Revalidate to get fresh data from server
       // Layout logic will handle preserving positions of remaining nodes
       await mutate();
     } catch (error) {
-      console.error("Error deleting node:", error);
+      if (error instanceof ApiError) {
+        console.error("API Error:", error.message, error.status);
+      } else {
+        console.error("Error deleting node:", error);
+      }
       alert("删除节点失败，请重试");
     }
   };
@@ -849,13 +619,6 @@ export default function CanvasPage() {
     }
 
     try {
-      console.log("[MoveToZone] Moving node to zone", {
-        nodeId: node.id,
-        nodeTitle: node.title,
-        targetZoneKey,
-        frameworkId: currentFramework.id,
-      });
-
       // Create new affinities: target zone = 1, all others = 0
       const newAffinities: Record<string, number> = {};
       currentFramework.zones.forEach((zone) => {
@@ -864,11 +627,6 @@ export default function CanvasPage() {
 
       // Update affinity in database
       await updateAffinity(node.id, newAffinities);
-
-      console.log("[MoveToZone] Successfully moved node", {
-        nodeId: node.id,
-        newAffinities,
-      });
 
       // Revalidate both canvas data and affinities to trigger layout recalculation
       if (projectId) {
@@ -891,31 +649,7 @@ export default function CanvasPage() {
     }
 
     try {
-      console.log("[HideNode] Hiding node", {
-        nodeId: node.id,
-        nodeTitle: node.title,
-        frameworkId: currentFramework.id,
-      });
-
-      const hiddenInFrameworks = (node as any).hiddenInFrameworks || {};
-      const newHiddenState = {
-        ...hiddenInFrameworks,
-        [currentFramework.id]: true,
-      };
-
-      const response = await fetch(`/api/canvas/${node.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hiddenInFrameworks: newHiddenState }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error("[HideNode] API error:", errorData);
-        throw new Error(`API returned ${response.status}: ${JSON.stringify(errorData)}`);
-      }
-
-      console.log("[HideNode] Successfully hidden node");
+      await canvasApi.nodes.hide(node.id, currentFramework.id);
 
       // Revalidate to update UI by explicitly calling global mutate with the SWR key
       if (projectId) {
@@ -923,7 +657,11 @@ export default function CanvasPage() {
         await globalMutate(swrKey);
       }
     } catch (error) {
-      console.error("[HideNode] Failed to hide node:", error);
+      if (error instanceof ApiError) {
+        console.error("[HideNode] API error:", error.message, error.status);
+      } else {
+        console.error("[HideNode] Failed to hide node:", error);
+      }
       alert("隐藏节点失败，请重试");
     }
   };
@@ -942,31 +680,7 @@ export default function CanvasPage() {
     }
 
     try {
-      console.log("[RestoreNode] Restoring node", {
-        nodeId,
-        nodeTitle: node.title,
-        frameworkId: currentFramework.id,
-      });
-
-      const hiddenInFrameworks = (node as any).hiddenInFrameworks || {};
-      const newHiddenState = {
-        ...hiddenInFrameworks,
-        [currentFramework.id]: false,
-      };
-
-      const response = await fetch(`/api/canvas/${nodeId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hiddenInFrameworks: newHiddenState }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error("[RestoreNode] API error:", errorData);
-        throw new Error(`API returned ${response.status}: ${JSON.stringify(errorData)}`);
-      }
-
-      console.log("[RestoreNode] Successfully restored node");
+      await canvasApi.nodes.restore(nodeId, currentFramework.id);
 
       // Revalidate to update UI by explicitly calling global mutate with the SWR key
       if (projectId) {
@@ -974,7 +688,11 @@ export default function CanvasPage() {
         await globalMutate(swrKey);
       }
     } catch (error) {
-      console.error("[RestoreNode] Failed to restore node:", error);
+      if (error instanceof ApiError) {
+        console.error("[RestoreNode] API error:", error.message, error.status);
+      } else {
+        console.error("[RestoreNode] Failed to restore node:", error);
+      }
       alert("恢复节点失败，请重试");
     }
   };
@@ -991,11 +709,6 @@ export default function CanvasPage() {
     if (projectId) {
       try {
         await setProjectFramework(framework.id);
-        console.log('[Canvas Page] Saved framework preference:', {
-          projectId,
-          frameworkId: framework.id,
-          frameworkName: framework.name,
-        });
       } catch (error) {
         console.error('[Canvas Page] Failed to save framework preference:', error);
       }
@@ -1036,7 +749,6 @@ export default function CanvasPage() {
       prevAffinityHashRef.current !== affinityHash &&
       nodes.length > 0
     ) {
-      console.log('[Layout] Affinity changed, triggering smooth layout recalculation');
       // Update nodes with latest content while preserving positions
       // This ensures affinity changes are reflected immediately
       setNodes(prevNodes =>
@@ -1068,21 +780,7 @@ export default function CanvasPage() {
         .sort()
         .join('|');
 
-      console.log('[Layout] Data hash check:', {
-        hasDbNodes: !!dbNodes,
-        nodeCount: dbNodes.length,
-        hasPrevHash: !!prevDataHashRef.current,
-        hashChanged: prevDataHashRef.current !== dataHash,
-        currentHash: dataHash.substring(0, 150),
-        prevHash: prevDataHashRef.current?.substring(0, 150)
-      });
-
       if (prevDataHashRef.current && prevDataHashRef.current !== dataHash) {
-        console.log('[Layout] Data changed, updating nodes while preserving positions', {
-          prevHash: prevDataHashRef.current.substring(0, 100),
-          newHash: dataHash.substring(0, 100)
-        });
-
         // Update node data while preserving existing positions
         // Only recalculate layout if nodes are added/removed
         const prevNodeIds = new Set(nodes.map(n => n.id));
@@ -1099,8 +797,6 @@ export default function CanvasPage() {
 
         if (nodesAdded && nodes.length > 0) {
           // Nodes added - preserve existing positions, only calculate for new nodes
-          console.log('[Layout] Nodes added, preserving existing positions');
-
           // Find the new nodes
           const newNodeIds = nodeContents.filter(n => !prevNodeIds.has(n.id));
 
@@ -1127,7 +823,6 @@ export default function CanvasPage() {
           setLayoutCalculated(false);
         } else if (nodesRemoved) {
           // Nodes removed - trigger layout recalculation to fill gaps
-          console.log('[Layout] Nodes removed, triggering layout recalculation');
           setNodes(prevNodes => {
             const remaining = prevNodes.filter(prevNode => newNodeIds.has(prevNode.id));
             // Update content while keeping positions temporarily
@@ -1142,12 +837,10 @@ export default function CanvasPage() {
           setLayoutCalculated(false);
         } else if (nodes.length === 0) {
           // Initial load
-          console.log('[Layout] Initial load, triggering layout calculation');
           setLayoutCalculated(false);
           setNodes([]);
         } else if (displayOrderChanged) {
           // DisplayOrder changed (drag-drop) - need recalculation
-          console.log('[Layout] DisplayOrder changed, triggering recalculation');
           setLayoutCalculated(false);
           // Update nodes with new displayOrder while preserving current positions
           // This allows CSS transitions to smoothly animate from current to new positions
@@ -1161,7 +854,6 @@ export default function CanvasPage() {
           )
         } else {
           // Only other data changed - update in place
-          console.log('[Layout] Only data properties changed, updating without position reset');
           setNodes(prevNodes =>
             prevNodes.map(prevNode => {
               const updatedContent = nodeContents.find(nc => nc.id === prevNode.id);
@@ -1177,249 +869,59 @@ export default function CanvasPage() {
     }
   }, [dbNodes, nodes, nodeContents]);
 
-  // Calculate layout dynamically after nodes are rendered
+  // Calculate layout using LayoutEngine
   useEffect(() => {
-    console.log('[Layout] useEffect triggered', {
-      layoutCalculated,
-      nodeContentsLength: nodeContents.length,
-      nodesLength: nodes.length
-    });
-
     if (layoutCalculated) {
-      console.log('[Layout] Already calculated, skipping');
       return;
     }
 
-    // Wait for data to load before starting layout calculation
+    // Wait for data to load
     if (nodeContents.length === 0) {
-      console.log('[Layout] No nodeContents yet, waiting for data');
       return;
     }
 
-    // Wait for positions to load from database
-    if (positionsLoading) {
-      console.log('[Layout] Waiting for positions to load from database');
+    if (positionsLoading || affinitiesLoading) {
       return;
     }
 
-    // Wait for affinities to load from database
-    if (affinitiesLoading) {
-      console.log('[Layout] Waiting for affinities to load from database');
+    if (!currentFramework) {
       return;
     }
 
-    // Check if we should load persisted positions (only once)
+    // Check if we should use persisted positions (only once)
     if (!positionsLoadedRef.current) {
-      const hasPersistedPositions = Object.keys(persistedPositions).length > 0;
+      const positionCheck = hasPersistedPositions(nodeContents, persistedPositions);
 
-      console.log('[Layout] Checking persisted positions', {
-        hasPersistedPositions,
-        persistedCount: Object.keys(persistedPositions).length,
-        nodesLength: nodes.length,
-        positionsLoading,
-      });
-
-      if (hasPersistedPositions) {
-        // Count how many nodes have persisted positions
-        const nodesWithPositions = nodeContents.filter(n => persistedPositions[n.id]).length;
-        const totalNodes = nodeContents.filter(n => !n.parentId).length; // Only count root nodes
-
-        console.log('[Layout] Checking persisted positions coverage', {
-          nodesWithPositions,
-          totalNodes,
-          coverage: `${Math.round((nodesWithPositions / totalNodes) * 100)}%`,
-        });
-
-        // Check if ALL nodes have persisted positions
-        const allNodesHavePositions = nodesWithPositions === totalNodes;
-
-        if (allNodesHavePositions) {
-          console.log('[Layout] All nodes have persisted positions, using them', {
-            count: nodesWithPositions,
-          });
-
-          // Use persisted positions for all nodes
-          const nodesWithPersistedPositions = nodeContents.map((content) => ({
-            ...content,
-            position: persistedPositions[content.id] || { x: -9999, y: -9999 },
-          }));
-          setNodes(nodesWithPersistedPositions);
-          setLayoutCalculated(true); // Skip layout calculation
-          positionsLoadedRef.current = true;
-          return;
-        } else if (nodesWithPositions > 0) {
-          console.log('[Layout] Some nodes have persisted positions, will calculate positions for missing nodes', {
-            withPositions: nodesWithPositions,
-            totalNodes,
-          });
-          // Initialize nodes with persisted positions where available
-          // Nodes without positions will be positioned by layout calculation below
-          const initialNodes = nodeContents.map((content) => ({
-            ...content,
-            position: persistedPositions[content.id] || { x: -9999, y: -9999 },
-          }));
-          setNodes(initialNodes);
-          positionsLoadedRef.current = true;
-          // Fall through to layout calculation for nodes without positions
-        } else {
-          console.log('[Layout] No persisted positions, will recalculate all');
-          // Fall through to normal layout calculation
-        }
+      if (positionCheck.hasAll) {
+        const nodesWithPositions = applyPersistedPositions(nodeContents, persistedPositions);
+        setNodes(nodesWithPositions);
+        setLayoutCalculated(true);
+        positionsLoadedRef.current = true;
+        return;
       }
 
-      // No persisted positions yet, check if we need to initialize for measurement
+      // Render off-screen for measurement
       if (nodes.length === 0) {
-        console.log('[Layout] No persisted positions, rendering off-screen for measurement');
-        // Render off-screen for measurement
-        const tempNodes = nodeContents.map((content) => ({
+        const tempNodes = nodeContents.map(content => ({
           ...content,
-          position: { x: -9999, y: -9999 }, // Off-screen for measurement
+          position: { x: -9999, y: -9999 },
         }));
         setNodes(tempNodes);
         return;
       }
-    }
 
-    console.log('[Layout] Starting layout calculation via requestAnimationFrame');
+      positionsLoadedRef.current = true;
+    }
 
     // Wait for next frame to ensure DOM is updated
     requestAnimationFrame(() => {
-      // Calculate actual layout based on measured heights
-      const calculatedNodes: CanvasNode[] = [];
-      const calculatedZoneBounds: Record<string, { width: number; height: number }> = {};
-
-      // Track max height across all zones
-      let globalMaxHeight = 0;
-
-      // Get dynamic zone configs based on current framework
-      const dynamicZoneConfigs = getDynamicZoneConfigs();
-
-      // Process each zone
-      for (const [zoneName, config] of Object.entries(dynamicZoneConfigs)) {
-        const currentYInColumn: number[] = Array(config.columnCount).fill(config.startY + 90); // Start from zone's Y position + top padding for zone header
-
-        // Get only root nodes (without parentId) from this zone
-        const rootNodeIds = config.nodeIds.filter(nodeId => {
-          const content = nodeContents.find(n => n.id === nodeId);
-          return content && !content.parentId;
-        });
-
-        // Sort by displayOrder to maintain stable positioning
-        const sortedRootNodeIds = rootNodeIds.sort((a, b) => {
-          const contentA = nodeContents.find(n => n.id === a);
-          const contentB = nodeContents.find(n => n.id === b);
-          const orderA = contentA?.displayOrder ?? 0;
-          const orderB = contentB?.displayOrder ?? 0;
-          return orderA - orderB;
-        });
-
-        sortedRootNodeIds.forEach((nodeId, index) => {
-          const content = nodeContents.find((n) => n.id === nodeId);
-          if (!content) return;
-
-          // Use round-robin column assignment for stability
-          // This ensures same displayOrder always produces same column
-          const currentColumn = index % config.columnCount;
-          const x = config.startX + currentColumn * (NODE_WIDTH + COLUMN_GAP);
-          const y = currentYInColumn[currentColumn];
-
-          // Get measured height from DOM (includes nested children height)
-          const nodeElement = nodeRefs.current.get(nodeId);
-          const actualHeight = nodeElement?.offsetHeight || 280; // Fallback to estimated height with children
-
-          calculatedNodes.push({
-            ...content,
-            position: { x, y },
-          });
-
-          // Update column Y position with actual height + reduced gap (since cards are more compact now)
-          currentYInColumn[currentColumn] += actualHeight + 30; // Reduced from VERTICAL_GAP (40) to 30
-        });
-
-        // Calculate zone bounds based on actual content (relative to zone's start position)
-        const maxHeight = Math.max(...currentYInColumn) - config.startY;
-        const zoneWidth = config.columnCount * NODE_WIDTH + (config.columnCount - 1) * COLUMN_GAP + 40; // +40 for padding
-
-        calculatedZoneBounds[zoneName] = {
-          width: zoneWidth,
-          height: maxHeight + 40, // +40 for bottom padding
-        };
-
-        // Track global max height
-        globalMaxHeight = Math.max(globalMaxHeight, maxHeight + 40);
-      }
-
-      // Apply uniform height to all zones (use the tallest zone's height)
-      for (const zoneName of Object.keys(calculatedZoneBounds)) {
-        calculatedZoneBounds[zoneName].height = globalMaxHeight;
-      }
-
-      // Find nodes that are not assigned to any zone (excluding child nodes)
-      const assignedNodeIds = new Set(
-        Object.values(dynamicZoneConfigs).flatMap(config => config.nodeIds)
+      // Use LayoutEngine to calculate positions
+      const { nodes: calculatedNodes, zoneBounds: calculatedZoneBounds } = calculateNodePositions(
+        nodeContents,
+        currentFramework,
+        nodeAffinities,
+        nodeRefs.current
       );
-      const unassignedRootNodes = nodeContents.filter(
-        content => !assignedNodeIds.has(content.id) && !content.parentId
-      );
-
-      console.log('[Layout] Node assignment check:', {
-        totalNodeContents: nodeContents.length,
-        rootNodeContents: nodeContents.filter(n => !n.parentId).length,
-        assignedNodeIdsCount: assignedNodeIds.size,
-        assignedNodeIds: Array.from(assignedNodeIds),
-        unassignedRootNodesCount: unassignedRootNodes.length,
-        unassignedRootNodeIds: unassignedRootNodes.map(n => n.id),
-      });
-
-      // Place unassigned nodes to the right of all zones
-      if (unassignedRootNodes.length > 0 && currentFramework) {
-        // Find the rightmost zone edge
-        const zoneRightEdges = currentFramework.zones.map((zone, zoneIndex) => {
-          const col = zoneIndex % 3;
-          const zoneStartX = ZONE_GAP + col * (ZONE_WIDTH + ZONE_GAP);
-          const zoneWidth = calculatedZoneBounds[zone.id]?.width || ZONE_WIDTH;
-          return zoneStartX + zoneWidth;
-        });
-        const maxZoneRightEdge = Math.max(...zoneRightEdges, 0);
-
-        const unassignedStartX = maxZoneRightEdge + 100; // 100px gap from zones
-        let currentY = ZONE_GAP + 90; // Same starting Y as zones
-
-        unassignedRootNodes.forEach(content => {
-          const nodeElement = nodeRefs.current.get(content.id);
-          const actualHeight = nodeElement?.offsetHeight || 280;
-
-          calculatedNodes.push({
-            ...content,
-            position: { x: unassignedStartX, y: currentY },
-          });
-
-          currentY += actualHeight + 30; // Same gap as zone nodes
-        });
-
-        console.log('[Layout] Placed unassigned nodes:', {
-          count: unassignedRootNodes.length,
-          startX: unassignedStartX,
-          nodeIds: unassignedRootNodes.map(n => n.id),
-        });
-      }
-
-      // Add all child nodes to calculatedNodes (they won't be positioned, but need to exist in state)
-      nodeContents.forEach(content => {
-        if (!calculatedNodes.find(n => n.id === content.id)) {
-          calculatedNodes.push({
-            ...content,
-            position: { x: 0, y: 0 }, // Position doesn't matter for child nodes (rendered inside parent)
-          });
-        }
-      });
-
-      console.log('[Layout] Final calculated nodes:', {
-        totalCalculated: calculatedNodes.length,
-        rootCalculated: calculatedNodes.filter(n => !n.parentId).length,
-        childCalculated: calculatedNodes.filter(n => n.parentId).length,
-        rootNodeIds: calculatedNodes.filter(n => !n.parentId).map(n => n.id),
-      });
 
       setNodes(calculatedNodes);
       setZoneBounds(calculatedZoneBounds);
@@ -1427,52 +929,20 @@ export default function CanvasPage() {
 
       // Save calculated positions to database (debounced)
       const positionsToSave = calculatedNodes
-        .filter(node => !node.parentId && node.position) // Only save root nodes with positions
+        .filter(node => !node.parentId && node.position)
         .map(node => ({
           nodeId: node.id,
           x: node.position!.x,
           y: node.position!.y,
         }));
 
-      console.log('[Layout] Saving calculated positions to database (debounced)', {
-        count: positionsToSave.length,
-      });
       savePositions(positionsToSave);
     });
-  }, [nodeContents, nodes.length, layoutCalculated, getDynamicZoneConfigs, savePositions, persistedPositions, currentFramework, positionsLoading, affinitiesLoading]);
+  }, [nodeContents, nodes.length, layoutCalculated, currentFramework, nodeAffinities, savePositions, persistedPositions, positionsLoading, affinitiesLoading]);
 
   // Node type config
   const nodeTypeConfig = NODE_TYPE_CONFIG;
 
-  // Helper to check if node matches current filter
-  const matchesFilter = useCallback((node: CanvasNode): boolean => {
-    // 1. Check if hidden in current framework
-    if (currentFramework?.id) {
-      const hiddenInFrameworks = (node as any).hiddenInFrameworks;
-      if (hiddenInFrameworks?.[currentFramework.id] === true) {
-        return false; // Hidden nodes don't match filter
-      }
-    }
-
-    // 2. Check stage filter
-    if (stageFilter !== "all") {
-      const hasStage = node.tags?.some((tag) => tag === `stage/${stageFilter}`);
-      if (!hasStage) return false;
-    }
-
-    // 3. Check tag filter (OR logic: match any selected tag)
-    if (selectedTags.length > 0) {
-      const hasAnyTag = node.tags?.some((tag) => selectedTags.includes(tag));
-      if (!hasAnyTag) return false;
-    }
-
-    return true;
-  }, [currentFramework, stageFilter, selectedTags]);
-
-  // Filter nodes based on current filters (hidden, stage, tags)
-  const visibleNodes = useMemo(() => {
-    return nodes.filter(matchesFilter);
-  }, [nodes, matchesFilter]);
 
   // Loading state
   if (isLoading) {
@@ -1539,15 +1009,34 @@ export default function CanvasPage() {
   }
 
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={rectIntersection}
-      onDragStart={handleDragStart}
-      onDragOver={handleDragOver}
-      onDragMove={handleDragMove}
-      onDragEnd={handleDragEnd}
+    <CanvasRoot
+      nodes={nodes}
+      allNodes={dbNodes || []}
+      currentFramework={currentFramework}
+      frameworks={frameworks}
+      projectId={projectId}
+      layoutCalculated={layoutCalculated}
+      zoneBounds={zoneBounds}
+      suggestionsByNode={suggestionsByNode}
+      isGenerating={isGenerating}
+      elapsedTime={elapsedTime}
+      onNodeDelete={handleDelete}
+      onNodeMoveToZone={handleMoveToZone}
+      onNodeHide={handleHideNode}
+      onNodeRestore={handleRestoreNode}
+      onFrameworkChange={handleFrameworkChange}
+      onApplySuggestion={handleApplySuggestion}
+      onDismissSuggestion={handleDismissSuggestion}
     >
-      <div className="h-full w-full flex flex-col bg-background overflow-hidden">
+      <DndContext
+        sensors={sensors}
+        collisionDetection={rectIntersection}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragMove={handleDragMove}
+        onDragEnd={handleDragEnd}
+      >
+        <div className="h-full w-full flex flex-col bg-background overflow-hidden">
         {/* Header */}
         <CanvasHeader
         currentFramework={currentFramework}
@@ -1559,6 +1048,8 @@ export default function CanvasPage() {
         elapsedTime={elapsedTime}
         onCreateNode={() => setNodeDialogOpen(true)}
         onGenerateSuggestions={handleGenerateSuggestions}
+        onApplySuggestion={handleApplySuggestion}
+        onDismissSuggestion={handleDismissSuggestion}
       />
 
       <div className="flex-1 flex overflow-hidden">
@@ -1568,56 +1059,33 @@ export default function CanvasPage() {
           transformRef={transformRef}
           zonesContainerRef={zonesContainerRef}
           nodesContainerRef={nodesContainerRef}
+          nodeRefs={nodeRefs}
           canvasOffset={canvasOffset}
           scale={scale}
           showStrategicZones={showStrategicZones}
-          layoutCalculated={layoutCalculated}
-          currentFramework={currentFramework}
-          zoneBounds={zoneBounds}
           getDynamicZoneConfigs={getDynamicZoneConfigs}
-          allNodes={dbNodes || []}
-          visibleNodes={visibleNodes}
-          selectedNode={selectedNode}
-          nodeTypeConfig={nodeTypeConfig}
-          stageFilter={stageFilter}
-          nodeRefs={nodeRefs}
-          matchesFilter={matchesFilter}
           onCanvasMouseDown={handleCanvasMouseDown}
           onNodeClick={handleNodeClick}
           onOpenAIChat={handleOpenAIChat}
           onAddChild={handleAddChild}
-          onDelete={handleDelete}
-          onMoveToZone={handleMoveToZone}
-          onHideNode={handleHideNode}
           onZoomIn={handleZoomIn}
           onZoomOut={handleZoomOut}
           onReset={handleZoomReset}
-          onFilterChange={setStageFilter}
-          selectedTags={selectedTags}
-          onTagsChange={setSelectedTags}
-          onRestoreNode={handleRestoreNode}
-          onSelectedNodeChange={setSelectedNode}
           onWheel={handleWheel}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
+          onBackgroundContextMenu={handleBackgroundContextMenu}
           activeNodeId={activeNodeId}
           overNodeId={overNodeId}
           dropPosition={dropPosition}
-          onBackgroundContextMenu={handleBackgroundContextMenu}
-          suggestionsByNode={suggestionsByNode}
-          onApplySuggestion={handleApplySuggestion}
-          onDismissSuggestion={handleDismissSuggestion}
         />
 
         {/* Right Panel */}
         {selectedNode && projectId && (
           <NodeDetailPanel
             selectedNode={selectedNode}
-            nodeTypeConfig={nodeTypeConfig}
-            nodes={nodes}
             showAIChat={showAIChat}
             commentInput={commentInput}
-            projectId={projectId}
             pendingAIChatPrompt={
               pendingAIChatPrompt?.nodeId === selectedNode.id
                 ? pendingAIChatPrompt
@@ -1641,31 +1109,24 @@ export default function CanvasPage() {
       {/* Subscription Debugger */}
       <SubscriptionDebugger />
 
-      {/* Node Dialog */}
-      <NodeDialog
-        open={nodeDialogOpen}
-        onOpenChange={setNodeDialogOpen}
-        onSubmit={handleCreateNode}
-        title={nodeDialogParentId ? "Add Child Node" : "Create New Node"}
-        description={nodeDialogParentId ? "Create a child node under the selected parent." : "Create a new canvas node."}
-      />
-
-      {/* Tag Dialog */}
-      <TagDialog
-        open={tagDialogOpen}
-        onOpenChange={setTagDialogOpen}
-        onSubmit={handleSubmitTag}
-        existingTags={tagDialogNodeId ? nodes.find((n) => n.id === tagDialogNodeId)?.tags || [] : []}
-      />
-
-      {/* Quick Node Dialog */}
-      <QuickNodeDialog
-        open={quickNodeDialogOpen}
-        onOpenChange={setQuickNodeDialogOpen}
-        onSubmit={handleQuickNodeSubmit}
-        detectedZone={quickNodeZone}
+      {/* All Canvas Dialogs */}
+      <CanvasDialogs
+        nodeDialogOpen={nodeDialogOpen}
+        setNodeDialogOpen={setNodeDialogOpen}
+        nodeDialogParentId={nodeDialogParentId}
+        onNodeCreate={handleCreateNode}
+        tagDialogOpen={tagDialogOpen}
+        setTagDialogOpen={setTagDialogOpen}
+        tagDialogNodeId={tagDialogNodeId}
+        tagDialogExistingTags={tagDialogNodeId ? nodes.find((n) => n.id === tagDialogNodeId)?.tags || [] : []}
+        onTagSubmit={handleSubmitTag}
+        quickNodeDialogOpen={quickNodeDialogOpen}
+        setQuickNodeDialogOpen={setQuickNodeDialogOpen}
+        quickNodeZone={quickNodeZone}
+        onQuickNodeSubmit={handleQuickNodeSubmit}
       />
       </div>
     </DndContext>
+    </CanvasRoot>
   );
 }

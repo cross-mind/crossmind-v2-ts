@@ -1,23 +1,26 @@
 "use client";
 
-import { Sparkles, Plus, Loader2 } from "lucide-react";
+import { Sparkles, Plus } from "lucide-react";
 import { SidebarToggle } from "@/components/sidebar-toggle";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { FrameworkSwitcher } from "./FrameworkSwitcher";
 import { HealthOverview } from "./HealthOverview";
-import type { ThinkingFramework, CanvasNode, AISuggestion } from "../canvas-data";
+import type { ThinkingFramework, CanvasNode } from "../canvas-data";
+import type { CanvasSuggestion } from "@/lib/db/schema";
 
 interface CanvasHeaderProps {
   currentFramework: ThinkingFramework | null;
   onFrameworkChange: (framework: ThinkingFramework) => void;
   nodes: CanvasNode[];
-  suggestions: AISuggestion[];
+  suggestions: CanvasSuggestion[];
   suggestionsLoading?: boolean;
   isGenerating?: boolean;
   elapsedTime?: number;
   onCreateNode: () => void;
   onGenerateSuggestions?: () => void;
+  onApplySuggestion?: (suggestionId: string) => void;
+  onDismissSuggestion?: (suggestionId: string) => void;
 }
 
 export function CanvasHeader({
@@ -30,6 +33,8 @@ export function CanvasHeader({
   elapsedTime = 0,
   onCreateNode,
   onGenerateSuggestions,
+  onApplySuggestion,
+  onDismissSuggestion,
 }: CanvasHeaderProps) {
   return (
     <header className="flex h-14 items-center justify-between gap-2 border-b bg-background px-4 shrink-0">
@@ -60,31 +65,16 @@ export function CanvasHeader({
 
         <Separator orientation="vertical" className="h-6" />
 
-        {/* Generate Suggestions Button */}
-        {onGenerateSuggestions && currentFramework && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 gap-2"
-            onClick={onGenerateSuggestions}
-            disabled={isGenerating || suggestionsLoading}
-          >
-            {isGenerating ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="text-xs text-muted-foreground">{elapsedTime}s</span>
-              </>
-            ) : (
-              <>
-                <Sparkles className="h-4 w-4" />
-                重新分析
-              </>
-            )}
-          </Button>
-        )}
-
-        {/* Health Overview (now includes suggestions) */}
-        <HealthOverview nodes={nodes} suggestions={suggestions} />
+        {/* Health Overview (now includes re-analyze button) */}
+        <HealthOverview
+          nodes={nodes}
+          suggestions={suggestions}
+          onGenerateSuggestions={onGenerateSuggestions}
+          isGenerating={isGenerating}
+          elapsedTime={elapsedTime}
+          onApplySuggestion={onApplySuggestion}
+          onDismissSuggestion={onDismissSuggestion}
+        />
       </div>
     </header>
   );
