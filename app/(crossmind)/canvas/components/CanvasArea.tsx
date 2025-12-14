@@ -35,6 +35,7 @@ interface CanvasAreaProps {
   onNodeClick: (node: CanvasNode, e: React.MouseEvent) => void;
   onOpenAIChat: (node: CanvasNode) => void;
   onAddChild: (parentNode: CanvasNode) => void;
+  onGenerateNodeSuggestions: (node: CanvasNode) => void;
   onZoomIn: () => void;
   onZoomOut: () => void;
   onReset: () => void;
@@ -47,6 +48,9 @@ interface CanvasAreaProps {
   activeNodeId?: string | null;
   overNodeId?: string | null;
   dropPosition?: DropPosition;
+
+  // Suggestion generation state
+  generatingNodeId?: string | null;
 }
 
 export function CanvasArea({
@@ -63,6 +67,7 @@ export function CanvasArea({
   onNodeClick,
   onOpenAIChat,
   onAddChild,
+  onGenerateNodeSuggestions,
   onZoomIn,
   onZoomOut,
   onReset,
@@ -73,10 +78,11 @@ export function CanvasArea({
   activeNodeId,
   overNodeId,
   dropPosition,
+  generatingNodeId,
 }: CanvasAreaProps) {
   // Access state from Context
   const {
-    nodes: allNodes,
+    allNodes,
     selectedNode,
     layoutCalculated,
     currentFramework,
@@ -206,6 +212,7 @@ export function CanvasArea({
               onDelete={deleteNode}
               onMoveToZone={moveToZone}
               onHideNode={hideNode}
+              onGenerateNodeSuggestions={onGenerateNodeSuggestions}
               onNodeRefSet={(id, el) => {
                 if (el) {
                   nodeRefs.current.set(id, el);
@@ -218,6 +225,7 @@ export function CanvasArea({
               onDismissSuggestion={dismissSuggestion}
               overNodeId={overNodeId}
               dropPosition={dropPosition}
+              generatingNodeId={generatingNodeId}
             />
           ))}
           </div>

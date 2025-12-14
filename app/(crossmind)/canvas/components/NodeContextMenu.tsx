@@ -10,7 +10,7 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { Sparkles, Plus, Trash2, MoveRight, EyeOff } from "lucide-react";
+import { Sparkles, Plus, Trash2, MoveRight, EyeOff, Lightbulb } from "lucide-react";
 import type { CanvasNode, ThinkingFramework } from "../canvas-data";
 
 interface NodeContextMenuProps {
@@ -22,6 +22,7 @@ interface NodeContextMenuProps {
   onDelete: (node: CanvasNode) => void;
   onMoveToZone?: (node: CanvasNode, zoneKey: string) => void;
   onHideNode?: (node: CanvasNode) => void;
+  onGenerateNodeSuggestions?: (node: CanvasNode) => void;
 }
 
 export function NodeContextMenu({
@@ -33,6 +34,7 @@ export function NodeContextMenu({
   onDelete,
   onMoveToZone,
   onHideNode,
+  onGenerateNodeSuggestions,
 }: NodeContextMenuProps) {
   return (
     <ContextMenu>
@@ -47,6 +49,17 @@ export function NodeContextMenu({
           <Sparkles className="mr-2 h-4 w-4" />
           <span>Ask AI</span>
         </ContextMenuItem>
+        {onGenerateNodeSuggestions && (
+          <ContextMenuItem
+            onClick={(e) => {
+              e.stopPropagation();
+              onGenerateNodeSuggestions(node);
+            }}
+          >
+            <Lightbulb className="mr-2 h-4 w-4" />
+            <span>Generate Suggestions</span>
+          </ContextMenuItem>
+        )}
         <ContextMenuItem
           onClick={(e) => {
             e.stopPropagation();

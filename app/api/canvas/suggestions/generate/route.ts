@@ -145,6 +145,7 @@ export async function POST(request: Request) {
         cleanedText = cleanedText.replace(/^```(?:json)?\s*\n/, "").replace(/\n```\s*$/, "");
       }
       suggestionsData = JSON.parse(cleanedText);
+      console.log("[Generate Suggestions] Parsed suggestions:", JSON.stringify(suggestionsData, null, 2));
     } catch (parseError) {
       console.error("[Generate Suggestions] JSON parse error:", parseError);
       console.error("[Generate Suggestions] Raw text:", text);
@@ -170,10 +171,13 @@ export async function POST(request: Request) {
     const createdSuggestions = [];
     for (const data of suggestionsData) {
       try {
+        // Convert "global" nodeId to null for canvas-wide suggestions
+        const nodeId = data.nodeId === "global" ? null : data.nodeId;
+
         const suggestion = await createCanvasSuggestion({
           projectId,
           frameworkId,
-          nodeId: data.nodeId,
+          nodeId,
           type: data.type,
           title: data.title,
           description: data.description,
@@ -185,7 +189,10 @@ export async function POST(request: Request) {
         });
         createdSuggestions.push(suggestion);
       } catch (error) {
-        console.error("[Generate Suggestions] Failed to save suggestion:", error);
+        console.error("[Generate Suggestions] Failed to save suggestion:", {
+          error,
+          suggestionData: data,
+        });
         // Continue with other suggestions even if one fails
       }
     }

@@ -12,6 +12,7 @@ import { SuggestionPopover } from "./SuggestionPopover";
 import { NodeCardHeader } from "./NodeCardHeader";
 import { NodeCardTypeContent } from "./NodeCardTypeContent";
 import { NodeCardTags } from "./NodeCardTags";
+import { Loader2 } from "lucide-react";
 import type { CanvasNode, ThinkingFramework } from "../canvas-data";
 import type { CanvasSuggestion } from "@/lib/db/schema";
 
@@ -27,6 +28,7 @@ function ChildNodeCard({
   onDelete,
   onMoveToZone,
   onHideNode,
+  onGenerateNodeSuggestions,
   overNodeId,
   dropPosition,
 }: {
@@ -40,6 +42,7 @@ function ChildNodeCard({
   onDelete: (node: CanvasNode) => void;
   onMoveToZone?: (node: CanvasNode, zoneKey: string) => void;
   onHideNode?: (node: CanvasNode) => void;
+  onGenerateNodeSuggestions?: (node: CanvasNode) => void;
   overNodeId?: string | null;
   dropPosition?: "top" | "bottom" | "center" | null;
 }) {
@@ -77,6 +80,7 @@ function ChildNodeCard({
         onDelete={onDelete}
         onMoveToZone={onMoveToZone}
         onHideNode={onHideNode}
+        onGenerateNodeSuggestions={onGenerateNodeSuggestions}
       >
         <div
           ref={setRefs}
@@ -127,6 +131,7 @@ interface CanvasNodeCardProps {
   onDelete: (node: CanvasNode) => void;
   onMoveToZone?: (node: CanvasNode, zoneKey: string) => void;
   onHideNode?: (node: CanvasNode) => void;
+  onGenerateNodeSuggestions?: (node: CanvasNode) => void;
   onNodeRefSet: (id: string, el: HTMLDivElement | null) => void;
   matchesFilter: (node: CanvasNode) => boolean;
   stageFilter: string;
@@ -137,6 +142,8 @@ interface CanvasNodeCardProps {
   nodeSuggestions: CanvasSuggestion[];
   onApplySuggestion: (suggestionId: string) => void;
   onDismissSuggestion: (suggestionId: string) => void;
+  // Suggestion generation state
+  generatingNodeId?: string | null;
 }
 
 export function CanvasNodeCard({
@@ -151,6 +158,7 @@ export function CanvasNodeCard({
   onDelete,
   onMoveToZone,
   onHideNode,
+  onGenerateNodeSuggestions,
   onNodeRefSet,
   matchesFilter,
   stageFilter,
@@ -159,8 +167,16 @@ export function CanvasNodeCard({
   nodeSuggestions,
   onApplySuggestion,
   onDismissSuggestion,
+  generatingNodeId,
 }: CanvasNodeCardProps) {
   const config = nodeTypeConfig[node.type];
+
+  // Skip nodes with unknown types
+  if (!config) {
+    console.warn(`[CanvasNodeCard] Unknown node type: ${node.type} for node ${node.id}`);
+    return null;
+  }
+
   const Icon = config.icon;
   const isMatching = matchesFilter(node);
   const isHighlighted = stageFilter === "all" || isMatching;
@@ -194,6 +210,12 @@ export function CanvasNodeCard({
       <div className="">
         {children.map((child, index) => {
           const childConfig = nodeTypeConfig[child.type];
+          // Skip nodes with unknown types
+          if (!childConfig) {
+            console.warn(`[CanvasNodeCard] Unknown node type: ${child.type} for node ${child.id}`);
+            return null;
+          }
+
           const grandChildren = visibleNodes.filter((n) => n.parentId === child.id);
           const isLast = index === children.length - 1;
 
@@ -221,6 +243,7 @@ export function CanvasNodeCard({
                 onDelete={onDelete}
                 onMoveToZone={onMoveToZone}
                 onHideNode={onHideNode}
+                onGenerateNodeSuggestions={onGenerateNodeSuggestions}
                 overNodeId={overNodeId}
                 dropPosition={dropPosition}
               />
@@ -244,6 +267,7 @@ export function CanvasNodeCard({
         onDelete={onDelete}
         onMoveToZone={onMoveToZone}
         onHideNode={onHideNode}
+        onGenerateNodeSuggestions={onGenerateNodeSuggestions}
       >
         <div
           ref={setCardRef}
@@ -275,6 +299,14 @@ export function CanvasNodeCard({
         {/* Drop indicators for parent nodes */}
         <DropIndicator position="top" isActive={isDragOver === true && dropPosition === "top"} />
         <DropIndicator position="bottom" isActive={isDragOver === true && dropPosition === "bottom"} />
+
+        {/* Loading Spinner - shown during suggestion generation */}
+        {generatingNodeId === node.id && (
+          <div className="absolute top-2 left-2 bg-primary/10 rounded-full p-1.5 border border-primary/20">
+            <Loader2 className="h-3.5 w-3.5 text-primary animate-spin" />
+          </div>
+        )}
+
         {/* Suggestion Badge with Popover - positioned to avoid title overlap */}
         {nodeSuggestions.length > 0 && (
           <SuggestionPopover

@@ -52,8 +52,9 @@ ${framework.zones.map((z) => `- ${z.name} (${z.id}): ${z.description}`).join("\n
    - 示例: 添加 "type/vision" 或 "priority/high"
 
 2. **add-node**: 建议创建新的相关节点
-   - 用于: 缺少某个重要的关联节点
+   - 用于: 缺少某个重要的关联节点或某个区域缺少节点
    - 示例: 有"问题"节点但缺少"解决方案"节点
+   - 支持指定目标区域: 通过 targetZone 参数指定新节点应该放在哪个区域
 
 3. **content-suggestion**: 提供内容优化要点（对话式）
    - 用于: 内容需要补充或优化，但需要用户参与讨论
@@ -72,7 +73,7 @@ ${framework.zones.map((z) => `- ${z.name} (${z.id}): ${z.description}`).join("\n
 \`\`\`json
 [
   {
-    "nodeId": "节点 ID",
+    "nodeId": "节点 ID (针对特定节点) 或 \"global\" (整体画布建议)",
     "type": "建议类型（add-tag | add-node | content-suggestion | refine-content）",
     "title": "简短标题（10字内）",
     "description": "详细描述（50字内）",
@@ -82,7 +83,7 @@ ${framework.zones.map((z) => `- ${z.name} (${z.id}): ${z.description}`).join("\n
     "actionParams": {
       // 根据 type 不同，包含不同的参数
       // add-tag: { "tags": ["tag1", "tag2"] }
-      // add-node: { "newNode": { "title": "...", "content": "...", "type": "...", "tags": [...], "zone": "..." } }
+      // add-node: { "newNode": { "title": "...", "content": "...", "type": "...", "tags": [...], "targetZone": "zone_id (可选)" } }
       // content-suggestion: { "suggestionPoints": ["要点1", "要点2", ...], "promptTemplate": "可选的提示词模板" }
       // refine-content: { "refinedContent": "优化后的完整内容" }
     }
@@ -101,6 +102,12 @@ ${framework.zones.map((z) => `- ${z.name} (${z.id}): ${z.description}`).join("\n
    - 内容 < 100 字 → 可使用 refine-content（直接替换）
    - 缺少标签 → 使用 add-tag
    - 缺少关联节点 → 使用 add-node
+6. **区域建议** (add-node):
+   - 分析框架的区域定义，识别缺失的节点
+   - 当某个区域完全没有节点时，建议在该区域创建节点
+   - 设置 targetZone 为目标区域的 ID
+   - 节点标题和内容应与目标区域的定义一致
+   - **使用 nodeId: "global"** 表示这是整体画布的建议，而非针对特定节点
 
 请确保返回的是**有效的 JSON 数组**，不要包含其他文本。`;
 }

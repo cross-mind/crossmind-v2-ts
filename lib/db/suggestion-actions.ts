@@ -88,6 +88,7 @@ export async function executeAddTag(
 /**
  * Execute add-node suggestion
  * Creates a new related node based on suggestion parameters
+ * Supports zone placement when targetZone is specified
  */
 export async function executeAddNode(
   suggestion: CanvasSuggestion,
@@ -99,6 +100,25 @@ export async function executeAddNode(
       throw new Error("New node data is required for add-node suggestion");
     }
 
+    // Build zoneAffinities if targetZone is specified
+    const zoneAffinities: Record<string, Record<string, number>> = {};
+    console.log("[executeAddNode] Debug:", {
+      targetZone: newNodeData.targetZone,
+      frameworkId: suggestion.frameworkId,
+      hasTargetZone: !!newNodeData.targetZone,
+      hasFrameworkId: !!suggestion.frameworkId,
+    });
+
+    if (newNodeData.targetZone && suggestion.frameworkId) {
+      // Set high affinity (0.9) for the target zone
+      zoneAffinities[suggestion.frameworkId] = {
+        [newNodeData.targetZone]: 0.9,
+      };
+      console.log("[executeAddNode] Built zoneAffinities:", zoneAffinities);
+    } else {
+      console.log("[executeAddNode] Skipping zoneAffinities - missing targetZone or frameworkId");
+    }
+
     // Create new node
     const newNode = await createCanvasNode({
       projectId: suggestion.projectId,
@@ -108,6 +128,7 @@ export async function executeAddNode(
       tags: newNodeData.tags || [],
       parentId: suggestion.nodeId || undefined, // Link to source node if available
       createdById: userId,
+      zoneAffinities: Object.keys(zoneAffinities).length > 0 ? zoneAffinities : undefined,
     });
 
     // Create activity on source node if it exists
@@ -130,6 +151,8 @@ export async function executeAddNode(
         newNodeId: newNode.id,
         newNodeTitle: newNode.title,
         linkedToNode: suggestion.nodeId,
+        targetZone: newNodeData.targetZone,
+        zoneAffinities,
       },
     };
   } catch (error) {

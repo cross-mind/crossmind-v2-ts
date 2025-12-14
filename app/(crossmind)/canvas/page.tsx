@@ -151,6 +151,7 @@ export default function CanvasPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [elapsedTime, setElapsedTime] = useState(0);
   const generationTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [generatingNodeId, setGeneratingNodeId] = useState<string | null>(null);
 
   // Cleanup timer on unmount
   useEffect(() => {
@@ -560,6 +561,67 @@ export default function CanvasPage() {
       setIsGenerating(false);
     }
   }, [projectId, currentFramework, mutateSuggestions, isGenerating]);
+
+  // Generate suggestions for a specific node
+  const handleGenerateNodeSuggestions = useCallback(async (node: CanvasNode) => {
+    if (!projectId || !currentFramework) return;
+
+    // Prevent duplicate requests
+    if (generatingNodeId === node.id) {
+      toast.info("正在处理中", {
+        description: `节点「${node.title}」的建议生成正在进行中，请稍候...`,
+      });
+      return;
+    }
+
+    // Set generating state
+    setGeneratingNodeId(node.id);
+
+    // Show loading toast
+    const loadingToast = toast.loading("正在分析...", {
+      description: `正在为节点「${node.title}」生成建议`,
+    });
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000);
+
+    try {
+      await canvasApi.suggestions.generate(
+        {
+          projectId,
+          frameworkId: currentFramework.id,
+          nodeId: node.id,
+        },
+        controller.signal
+      );
+
+      clearTimeout(timeoutId);
+      await mutateSuggestions();
+
+      // Dismiss loading and show success
+      toast.dismiss(loadingToast);
+      toast.success("分析完成", {
+        description: `已为节点「${node.title}」生成建议`,
+      });
+    } catch (error) {
+      console.error("[Canvas] Failed to generate node suggestions:", error);
+      clearTimeout(timeoutId);
+      toast.dismiss(loadingToast);
+
+      if (error instanceof Error && error.name === 'AbortError') {
+        toast.error("分析超时", {
+          description: "AI 分析时间过长（超过 60 秒），请稍后重试。",
+        });
+      } else {
+        toast.error("分析失败", {
+          description: "无法生成节点建议，请稍后重试。",
+        });
+      }
+    } finally {
+      // Clear generating state
+      setGeneratingNodeId(null);
+    }
+  }, [projectId, currentFramework, mutateSuggestions, generatingNodeId]);
 
   // Restore selected node from URL on initial load and sync with URL changes
   useEffect(() => {
@@ -1068,6 +1130,7 @@ export default function CanvasPage() {
           onNodeClick={handleNodeClick}
           onOpenAIChat={handleOpenAIChat}
           onAddChild={handleAddChild}
+          onGenerateNodeSuggestions={handleGenerateNodeSuggestions}
           onZoomIn={handleZoomIn}
           onZoomOut={handleZoomOut}
           onReset={handleZoomReset}
@@ -1078,6 +1141,7 @@ export default function CanvasPage() {
           activeNodeId={activeNodeId}
           overNodeId={overNodeId}
           dropPosition={dropPosition}
+          generatingNodeId={generatingNodeId}
         />
 
         {/* Right Panel */}
