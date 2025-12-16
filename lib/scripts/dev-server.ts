@@ -235,8 +235,14 @@ async function main() {
 	if (existingPid && isProcessAlive(existingPid)) {
 		// 端口被占用
 		if (isNonInteractive) {
-			console.error(`错误: 端口 ${targetPort} 已在运行 (非交互环境)`);
-			console.error(`提示: 使用 'pnpm stop ${targetPort}' 停止现有服务器`);
+			console.error(`\n错误: 端口 ${targetPort} 已在运行 (PID: ${existingPid})`);
+			console.error("由于检测到非交互环境（管道/重定向/CI），无法显示交互菜单\n");
+			console.error("可用操作：");
+			console.error(`  • 查看日志:       pnpm logs ${targetPort}`);
+			console.error(`  • 使用其他端口:   pnpm dev ${targetPort + 1}`);
+			console.error(`  • 停止并重启:     pnpm stop ${targetPort} && pnpm dev`);
+			console.error(`  • 强制重启:       pnpm stop ${targetPort}; pnpm dev\n`);
+			console.error("或者在交互式终端中运行 'pnpm dev' 以使用交互菜单");
 			process.exit(1);
 		}
 
