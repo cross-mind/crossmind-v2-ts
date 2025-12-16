@@ -202,8 +202,12 @@ async function viewLogs(port: number): Promise<void> {
 
 // 主函数
 async function main() {
-	const isCI =
-		process.env.CI === "true" || process.env.PLAYWRIGHT === "True";
+	// 检测非交互环境：CI 环境或没有 TTY
+	const isNonInteractive =
+		process.env.CI === "true" ||
+		process.env.PLAYWRIGHT === "True" ||
+		!process.stdin.isTTY ||
+		!process.stdout.isTTY;
 
 	// 1. 创建 .logs 目录
 	await fs.mkdir(".logs", { recursive: true });
@@ -230,8 +234,9 @@ async function main() {
 
 	if (existingPid && isProcessAlive(existingPid)) {
 		// 端口被占用
-		if (isCI) {
-			console.error(`错误: 端口 ${targetPort} 已在运行 (CI 环境)`);
+		if (isNonInteractive) {
+			console.error(`错误: 端口 ${targetPort} 已在运行 (非交互环境)`);
+			console.error(`提示: 使用 'pnpm stop ${targetPort}' 停止现有服务器`);
 			process.exit(1);
 		}
 
