@@ -1,0 +1,129 @@
+{
+  "frameworks": [
+    {
+      "id": "lean-canvas",
+      "name": "精益画布",
+      "icon": "LayoutGrid",
+      "description": "适用于快速验证商业模式的框架，帮助创业者聚焦核心问题和解决方案",
+      "zones": [
+        {
+          "zoneKey": "problem",
+          "name": "问题",
+          "description": "目标用户面临的核心问题（列出1-3个最重要的问题）",
+          "colorKey": "red",
+          "displayOrder": 1
+        },
+        {
+          "zoneKey": "solution",
+          "name": "解决方案",
+          "description": "针对问题的产品方案（简洁描述如何解决问题）",
+          "colorKey": "blue",
+          "displayOrder": 2
+        },
+        {
+          "zoneKey": "unique-value-proposition",
+          "name": "独特价值主张",
+          "description": "产品的核心竞争力和差异化价值（一句话说明为什么选择你）",
+          "colorKey": "purple",
+          "displayOrder": 3
+        },
+        {
+          "zoneKey": "unfair-advantage",
+          "name": "不可复制的竞争优势",
+          "description": "难以被竞争对手复制的优势（技术壁垒、网络效应、品牌等）",
+          "colorKey": "green",
+          "displayOrder": 4
+        },
+        {
+          "zoneKey": "customer-segments",
+          "name": "目标客户",
+          "description": "最有价值的早期用户群体（明确画像和痛点）",
+          "colorKey": "orange",
+          "displayOrder": 5
+        },
+        {
+          "zoneKey": "key-metrics",
+          "name": "关键指标",
+          "description": "衡量成功的核心数据（如用户增长率、留存率、NPS等）",
+          "colorKey": "cyan",
+          "displayOrder": 6
+        },
+        {
+          "zoneKey": "channels",
+          "name": "渠道通路",
+          "description": "触达目标客户的途径（如社交媒体、内容营销、合作伙伴等）",
+          "colorKey": "yellow",
+          "displayOrder": 7
+        },
+        {
+          "zoneKey": "cost-structure",
+          "name": "成本结构",
+          "description": "运营所需的主要成本项（如人力、服务器、营销等）",
+          "colorKey": "gray",
+          "displayOrder": 8
+        },
+        {
+          "zoneKey": "revenue-streams",
+          "name": "收入来源",
+          "description": "商业模式的变现方式（如订阅费、交易抽成、广告等）",
+          "colorKey": "emerald",
+          "displayOrder": 9
+        }
+      ],
+      "healthDimensions": [
+        {
+          "dimensionKey": "coverage",
+          "name": "覆盖度",
+          "description": "各区域节点的完整性评估",
+          "weight": 0.3,
+          "evaluationCriteria": {
+            "excellent": "所有9个区域都有至少2个节点，内容详实具体",
+            "good": "8个区域有节点，内容基本完整，少量空白可接受",
+            "warning": "超过30%的区域为空或内容过于简略",
+            "critical": "超过50%的区域为空，核心区域（问题/解决方案/价值主张）缺失"
+          },
+          "displayOrder": 1
+        },
+        {
+          "dimensionKey": "clarity",
+          "name": "清晰度",
+          "description": "节点内容的具体性和可执行性",
+          "weight": 0.25,
+          "evaluationCriteria": {
+            "excellent": "节点内容具体、可量化、可执行，包含数据支撑",
+            "good": "节点内容清晰，部分缺少细节但方向明确",
+            "warning": "节点内容模糊，缺乏细节和量化指标",
+            "critical": "节点内容空泛，无法指导执行，缺乏可操作性"
+          },
+          "displayOrder": 2
+        },
+        {
+          "dimensionKey": "balance",
+          "name": "平衡性",
+          "description": "各区域内容深度的均衡程度",
+          "weight": 0.25,
+          "evaluationCriteria": {
+            "excellent": "各区域内容深度相当，没有明显偏重或忽视",
+            "good": "核心区域内容充分，次要区域略显不足但可接受",
+            "warning": "部分核心区域内容不足，或某些区域过度详细导致失焦",
+            "critical": "严重失衡，核心区域内容缺失或过度关注非关键领域"
+          },
+          "displayOrder": 3
+        },
+        {
+          "dimensionKey": "logic",
+          "name": "逻辑性",
+          "description": "各区域之间的逻辑关联和一致性",
+          "weight": 0.2,
+          "evaluationCriteria": {
+            "excellent": "问题-解决方案-价值主张高度一致，客户-渠道-收入逻辑清晰",
+            "good": "核心逻辑链条完整，局部有小的不一致可忽略",
+            "warning": "存在明显的逻辑断层，如解决方案未对应问题，或收入模式与客户不匹配",
+            "critical": "逻辑混乱，各区域相互矛盾，无法形成可行的商业模式"
+          },
+          "displayOrder": 4
+        }
+      ]
+    }
+  ]
+}

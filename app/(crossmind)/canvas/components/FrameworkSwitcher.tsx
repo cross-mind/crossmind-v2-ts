@@ -68,18 +68,22 @@ export function FrameworkSwitcher({
                 {framework.description}
               </p>
               <div className="flex flex-wrap gap-1 mt-2">
-                {framework.zones.map((zone: { id: string; name: string; colorKey: string }, idx: number) => (
-                  <span
-                    key={zone.id}
-                    className="text-[10px] px-1.5 py-0.5 rounded text-white font-medium"
-                    style={{
-                      backgroundColor: ZONE_COLORS[zone.colorKey as keyof typeof ZONE_COLORS].label,
-                      opacity: 0.9,
-                    }}
-                  >
-                    {zone.name}
-                  </span>
-                ))}
+                {framework.zones.map((zone: { id: string; name: string; colorKey: string }, idx: number) => {
+                  const colorKey = zone.colorKey as keyof typeof ZONE_COLORS;
+                  const color = ZONE_COLORS[colorKey] || ZONE_COLORS.gray; // Fallback to gray
+                  return (
+                    <span
+                      key={zone.id}
+                      className="text-[10px] px-1.5 py-0.5 rounded text-white font-medium"
+                      style={{
+                        backgroundColor: color.label,
+                        opacity: 0.9,
+                      }}
+                    >
+                      {zone.name}
+                    </span>
+                  );
+                })}
               </div>
             </div>
           </DropdownMenuItem>

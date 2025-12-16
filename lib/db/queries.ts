@@ -40,8 +40,10 @@ import {
   type Framework,
   frameworkZone,
   type FrameworkZone,
-  chatSession,
-  type ChatSession,
+  projectFramework,
+  type ProjectFramework,
+  projectFrameworkZone,
+  type ProjectFrameworkZone,
 } from "./schema";
 import { generateHashedPassword } from "./utils";
 
@@ -149,22 +151,45 @@ export async function getChatsByUserId({
   limit,
   startingAfter,
   endingBefore,
+  projectId,
 }: {
   id: string;
   limit: number;
   startingAfter: string | null;
   endingBefore: string | null;
+  projectId?: string | null;
 }) {
   try {
     const extendedLimit = limit + 1;
 
-    const query = (whereCondition?: SQL<any>) =>
-      db
+    const query = (whereCondition?: SQL<any>) => {
+      const conditions: SQL<any>[] = [eq(chat.userId, id)];
+
+      // Filter by projectId if provided
+      if (projectId) {
+        conditions.push(eq(chat.projectId, projectId));
+      }
+
+      // Show normal chats and health-analysis chats in sidebar
+      conditions.push(
+        or(
+          eq(chat.type, "chat"),
+          eq(chat.type, "health-analysis"),
+          isNull(chat.type)
+        ) as SQL<any>
+      );
+
+      if (whereCondition) {
+        conditions.push(whereCondition);
+      }
+
+      return db
         .select()
         .from(chat)
-        .where(whereCondition ? and(whereCondition, eq(chat.userId, id)) : eq(chat.userId, id))
+        .where(and(...conditions))
         .orderBy(desc(chat.createdAt))
         .limit(extendedLimit);
+    };
 
     let filteredChats: Chat[] = [];
 
@@ -198,7 +223,8 @@ export async function getChatsByUserId({
       chats: hasMore ? filteredChats.slice(0, limit) : filteredChats,
       hasMore,
     };
-  } catch (_error) {
+  } catch (error) {
+    console.error("[getChatsByUserId] Error details:", error);
     throw new ChatSDKError("bad_request:database", "Failed to get chats by user id");
   }
 }
@@ -871,7 +897,7 @@ export async function getCanvasSuggestionsByFramework({
   try {
     const conditions = [
       eq(canvasSuggestion.projectId, projectId),
-      eq(canvasSuggestion.frameworkId, frameworkId),
+      eq(canvasSuggestion.projectFrameworkId, frameworkId),
     ];
 
     if (status) {
@@ -1500,13 +1526,13 @@ export async function updateNodeAffinities(
 }
 
 /**
- * Get node positions for a specific framework
+ * Get node positions for a specific project framework
  * @returns Map of nodeId → { x, y }
  */
 export async function getNodePositions(
-  frameworkId: string,
+  projectFrameworkId: string,
   nodeIds: string[]
-): Promise<Record<string, { x: number; y: number }>> {
+): Promise<Record<string, { x, number; y: number }>> {
   try {
     if (nodeIds.length === 0) return {};
 
@@ -1519,7 +1545,7 @@ export async function getNodePositions(
       .from(canvasNodePosition)
       .where(
         and(
-          eq(canvasNodePosition.frameworkId, frameworkId),
+          eq(canvasNodePosition.projectFrameworkId, projectFrameworkId),
           inArray(canvasNodePosition.nodeId, nodeIds)
         )
       );
@@ -1537,11 +1563,11 @@ export async function getNodePositions(
 }
 
 /**
- * Batch update node positions for a specific framework
+ * Batch update node positions for a specific project framework
  * @param positions - Array of { nodeId, x, y }
  */
 export async function batchUpdateNodePositions(
-  frameworkId: string,
+  projectFrameworkId: string,
   positions: Array<{ nodeId: string; x: number; y: number }>
 ) {
   try {
@@ -1555,7 +1581,7 @@ export async function batchUpdateNodePositions(
         .delete(canvasNodePosition)
         .where(
           and(
-            eq(canvasNodePosition.frameworkId, frameworkId),
+            eq(canvasNodePosition.projectFrameworkId, projectFrameworkId),
             inArray(canvasNodePosition.nodeId, nodeIds)
           )
         );
@@ -1563,7 +1589,7 @@ export async function batchUpdateNodePositions(
       await tx.insert(canvasNodePosition).values(
         positions.map(p => ({
           nodeId: p.nodeId,
-          frameworkId,
+          projectFrameworkId,
           x: p.x,
           y: p.y,
           updatedAt: new Date(),
@@ -1613,24 +1639,162 @@ export async function setProjectFramework(projectId: string, frameworkId: string
   }
 }
 
-// ========== ChatSession Queries ==========
-
 /**
- * Get chat session by canvas node ID
+ * Get project framework with zones
  */
-export async function getChatSessionByNodeId({ nodeId }: { nodeId: string }): Promise<ChatSession | null> {
+export async function getProjectFrameworkWithZones({
+  projectFrameworkId,
+}: {
+  projectFrameworkId: string;
+}) {
   try {
-    const [session] = await db.select().from(chatSession).where(eq(chatSession.canvasNodeId, nodeId)).limit(1);
-    return session || null;
+    const [fw] = await db
+      .select()
+      .from(projectFramework)
+      .where(eq(projectFramework.id, projectFrameworkId))
+      .limit(1);
+
+    if (!fw) return null;
+
+    const zones = await db
+      .select()
+      .from(projectFrameworkZone)
+      .where(eq(projectFrameworkZone.projectFrameworkId, projectFrameworkId))
+      .orderBy(asc(projectFrameworkZone.displayOrder));
+
+    return { ...fw, zones };
   } catch (_error) {
-    throw new ChatSDKError("bad_request:database", "Failed to get chat session");
+    throw new ChatSDKError("bad_request:database", "Failed to get project framework with zones");
   }
 }
 
 /**
- * Create new chat session for canvas node
+ * Get zones with node titles for a project framework
  */
-export async function createChatSession({
+export async function getZonesWithNodeTitles({
+  projectFrameworkId,
+}: {
+  projectFrameworkId: string;
+}) {
+  try {
+    // Get zones for this framework
+    const zones = await db
+      .select()
+      .from(projectFrameworkZone)
+      .where(eq(projectFrameworkZone.projectFrameworkId, projectFrameworkId))
+      .orderBy(asc(projectFrameworkZone.displayOrder));
+
+    // Get nodes for each zone
+    const zonesWithNodes = await Promise.all(
+      zones.map(async (zone) => {
+        // Get nodes associated with this zone via affinity
+        const nodeAffinities = await db
+          .select({
+            nodeId: canvasNodeZoneAffinity.nodeId,
+            nodeTitle: canvasNode.title,
+            affinityWeight: canvasNodeZoneAffinity.affinityWeight,
+          })
+          .from(canvasNodeZoneAffinity)
+          .innerJoin(canvasNode, eq(canvasNodeZoneAffinity.nodeId, canvasNode.id))
+          .where(eq(canvasNodeZoneAffinity.zoneId, zone.id))
+          .orderBy(desc(canvasNodeZoneAffinity.affinityWeight));
+
+        return {
+          ...zone,
+          nodes: nodeAffinities.map((na) => ({
+            id: na.nodeId,
+            title: na.nodeTitle,
+            affinityWeight: na.affinityWeight,
+          })),
+        };
+      })
+    );
+
+    return zonesWithNodes;
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to get zones with node titles");
+  }
+}
+
+/**
+ * Update project framework health score
+ */
+export async function updateProjectFrameworkHealth({
+  id,
+  healthScore,
+  lastHealthCheckAt,
+}: {
+  id: string;
+  healthScore: number;
+  lastHealthCheckAt: Date;
+}) {
+  try {
+    await db
+      .update(projectFramework)
+      .set({
+        healthScore,
+        lastHealthCheckAt,
+        updatedAt: new Date(),
+      })
+      .where(eq(projectFramework.id, id));
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to update project framework health");
+  }
+}
+
+/**
+ * Update project framework dimension score
+ */
+export async function updateProjectFrameworkDimensionScore({
+  projectFrameworkId,
+  dimensionKey,
+  score,
+  insights,
+}: {
+  projectFrameworkId: string;
+  dimensionKey: string;
+  score: number;
+  insights: string;
+}) {
+  try {
+    // Check if ProjectFrameworkHealthDimension table exists
+    const tables = await client`
+      SELECT table_name
+      FROM information_schema.tables
+      WHERE table_schema = 'public'
+      AND table_name = 'ProjectFrameworkHealthDimension';
+    `;
+
+    if (tables.length === 0) {
+      console.warn("[updateProjectFrameworkDimensionScore] ProjectFrameworkHealthDimension table does not exist, skipping");
+      return;
+    }
+
+    // TODO: Implement dimension score update when table is ready
+    console.log(`[updateProjectFrameworkDimensionScore] Would update dimension ${dimensionKey} to ${score}`);
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to update framework dimension score");
+  }
+}
+
+// ========== Canvas Node Chat Queries ==========
+
+/**
+ * Get chat by canvas node ID
+ */
+export async function getChatByNodeId({ nodeId }: { nodeId: string }): Promise<Chat | null> {
+  try {
+    const [chatRecord] = await db.select().from(chat).where(eq(chat.canvasNodeId, nodeId)).limit(1);
+    return chatRecord || null;
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to get chat by node");
+  }
+}
+
+/**
+ * Create new chat for canvas node
+ */
+export async function createChatForNode({
   projectId,
   canvasNodeId,
   userId,
@@ -1638,51 +1802,26 @@ export async function createChatSession({
   projectId: string;
   canvasNodeId: string;
   userId: string;
-}): Promise<ChatSession> {
+}): Promise<Chat> {
   try {
-    const sessionId = generateUUID();
+    const chatId = generateUUID();
     const now = new Date();
 
-    // Create both ChatSession and corresponding Chat record
-    // Messages will reference the Chat record via chatId
-    await db.transaction(async (tx) => {
-      // Create Chat record with same ID as ChatSession
-      await tx.insert(chat).values({
-        id: sessionId,
-        userId,
-        title: "Canvas Chat", // Default title
-        visibility: "private",
-        createdAt: now,
-      });
+    // Create Chat record with canvas node association
+    const [newChat] = await db.insert(chat).values({
+      id: chatId,
+      userId,
+      title: "Canvas Chat",
+      visibility: "private",
+      createdAt: now,
+      projectId,
+      canvasNodeId,
+      type: "chat",
+      status: "active",
+    }).returning();
 
-      // Create ChatSession record
-      await tx.insert(chatSession).values({
-        id: sessionId,
-        projectId,
-        canvasNodeId,
-        userId,
-        createdAt: now,
-      });
-    });
-
-    // Return the created session
-    const [newSession] = await db
-      .select()
-      .from(chatSession)
-      .where(eq(chatSession.id, sessionId));
-
-    return newSession;
+    return newChat;
   } catch (_error) {
-    throw new ChatSDKError("bad_request:database", "Failed to create chat session");
+    throw new ChatSDKError("bad_request:database", "Failed to create chat for node");
   }
-}
-
-/**
- * Get messages by chat session ID
- * Reuses the same message table structure as regular chats
- */
-export async function getMessagesByChatSessionId({ id }: { id: string }): Promise<Array<DBMessage>> {
-  // ChatSession and Chat both use the same Message_v2 table with chatId foreign key
-  // So we can reuse the existing getMessagesByChatId function
-  return getMessagesByChatId({ id });
 }

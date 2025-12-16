@@ -20,7 +20,15 @@
       "Bash(npm run lint:*)",
       "Bash(npx tsc:*)",
       "Bash(wc:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "Bash(openspec list:*)",
+      "Bash(pnpm db:generate:*)",
+      "Bash(pkill:*)",
+      "Bash(chmod:*)",
+      "Bash(pnpm db:push:*)",
+      "Bash(npx tsx:*)",
+      "Bash(pnpm logs:*)",
+      "Bash(ls:*)"
     ],
     "deny": [],
     "ask": []

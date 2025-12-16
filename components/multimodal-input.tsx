@@ -17,7 +17,7 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
-import { useLocalStorage, useWindowSize } from "usehooks-ts";
+import { useWindowSize } from "usehooks-ts";
 import { saveChatModelAsCookie } from "@/app/(chat)/actions";
 import { SelectItem } from "@/components/ui/select";
 import { chatModels } from "@/lib/ai/models";
@@ -98,23 +98,26 @@ function PureMultimodalInput({
     }
   }, []);
 
-  const [localStorageInput, setLocalStorageInput] = useLocalStorage("input", "");
-
+  // SSR-safe localStorage for input persistence
   useEffect(() => {
-    if (textareaRef.current) {
+    if (typeof window !== "undefined" && textareaRef.current) {
+      const savedInput = localStorage.getItem("input") || "";
       const domValue = textareaRef.current.value;
       // Prefer DOM value over localStorage to handle hydration
-      const finalValue = domValue || localStorageInput || "";
+      const finalValue = domValue || savedInput || "";
       setInput(finalValue);
       adjustHeight();
     }
     // Only run once after hydration
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [adjustHeight, localStorageInput, setInput]);
+  }, [adjustHeight, setInput]);
 
+  // Save input to localStorage on change
   useEffect(() => {
-    setLocalStorageInput(input);
-  }, [input, setLocalStorageInput]);
+    // if (typeof window !== "undefined") {
+    //   localStorage.setItem("input", input);
+    // }
+  }, [input]);
 
   const handleInput = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
     setInput(event.target.value);
@@ -146,7 +149,6 @@ function PureMultimodalInput({
     });
 
     setAttachments([]);
-    setLocalStorageInput("");
     resetHeight();
     setInput("");
 
@@ -159,7 +161,6 @@ function PureMultimodalInput({
     attachments,
     sendMessage,
     setAttachments,
-    setLocalStorageInput,
     width,
     chatId,
     resetHeight,

@@ -1,15 +1,10 @@
-import { createOpenAI } from "@ai-sdk/openai";
+import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { customProvider, extractReasoningMiddleware, wrapLanguageModel } from "ai";
 import { isTestEnvironment } from "../constants";
 
-// Configure OpenRouter
-const openrouter = createOpenAI({
-  baseURL: "https://openrouter.ai/api/v1",
+// Configure OpenRouter with official provider for better tool calling support
+const openrouter = createOpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
-  headers: {
-    "HTTP-Referer": "https://crossmind.app", // Optional: for OpenRouter rankings
-    "X-Title": "CrossMind", // Optional: shows in OpenRouter dashboard
-  },
 });
 
 export const myProvider = isTestEnvironment
@@ -26,13 +21,13 @@ export const myProvider = isTestEnvironment
     })()
   : customProvider({
       languageModels: {
-        // Using Claude Sonnet 4.5 via OpenRouter
-        "chat-model": openrouter("anthropic/claude-sonnet-4.5"),
+        // Using Claude Sonnet 4 via OpenRouter official provider (proper tool calling support)
+        "chat-model": openrouter.chat("anthropic/claude-sonnet-4"),
         "chat-model-reasoning": wrapLanguageModel({
-          model: openrouter("anthropic/claude-sonnet-4.5"),
-          middleware: extractReasoningMiddleware({ tagName: "think" }),
+          model: openrouter.chat("anthropic/claude-sonnet-4"),
+          middleware: extractReasoningMiddleware({ tagName: "thinking" }),
         }),
-        "title-model": openrouter("anthropic/claude-sonnet-4.5"),
-        "artifact-model": openrouter("anthropic/claude-sonnet-4.5"),
+        "title-model": openrouter.chat("anthropic/claude-sonnet-4"),
+        "artifact-model": openrouter.chat("anthropic/claude-sonnet-4"),
       },
     });

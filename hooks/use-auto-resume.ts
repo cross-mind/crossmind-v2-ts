@@ -47,7 +47,14 @@ export function useAutoResume({
 
     if (dataPart.type === "data-appendMessage") {
       const message = JSON.parse(dataPart.data);
-      setMessages([...initialMessages, message]);
+      // Use functional form to append based on current state, not initialMessages
+      setMessages((currentMessages) => {
+        // Check if message already exists to prevent duplicates
+        if (currentMessages.some((m) => m.id === message.id)) {
+          return currentMessages;
+        }
+        return [...currentMessages, message];
+      });
     }
-  }, [dataStream, initialMessages, setMessages]);
+  }, [dataStream, setMessages]);
 }

@@ -17,6 +17,10 @@ import { MessageEditor } from "./message-editor";
 import { MessageReasoning } from "./message-reasoning";
 import { PreviewAttachment } from "./preview-attachment";
 import { Weather } from "./weather";
+import { FrameworkZonesDisplay } from "./health-tools/FrameworkZonesDisplay";
+import { NodeDetailDisplay } from "./health-tools/NodeDetailDisplay";
+import { SuggestionCreatedDisplay } from "./health-tools/SuggestionCreatedDisplay";
+import { HealthUpdatedDisplay } from "./health-tools/HealthUpdatedDisplay";
 
 const PurePreviewMessage = ({
   chatId,
@@ -218,6 +222,99 @@ const PurePreviewMessage = ({
                               type="request-suggestions"
                             />
                           )
+                        }
+                      />
+                    )}
+                  </ToolContent>
+                </Tool>
+              );
+            }
+
+            // Health Analysis Tools
+            if (type === "tool-viewFrameworkZones") {
+              const { toolCallId, state } = part;
+
+              return (
+                <Tool defaultOpen={true} key={toolCallId}>
+                  <ToolHeader state={state} type="tool-viewFrameworkZones" />
+                  <ToolContent>
+                    {state === "input-available" && <ToolInput input={part.input} />}
+                    {state === "output-available" && (
+                      <ToolOutput
+                        errorText={part.output && "error" in part.output ? String(part.output.error) : undefined}
+                        output={
+                          part.output && !("error" in part.output) ? (
+                            <FrameworkZonesDisplay output={part.output} />
+                          ) : null
+                        }
+                      />
+                    )}
+                  </ToolContent>
+                </Tool>
+              );
+            }
+
+            if (type === "tool-viewNode") {
+              const { toolCallId, state } = part;
+
+              return (
+                <Tool defaultOpen={true} key={toolCallId}>
+                  <ToolHeader state={state} type="tool-viewNode" />
+                  <ToolContent>
+                    {state === "input-available" && <ToolInput input={part.input} />}
+                    {state === "output-available" && (
+                      <ToolOutput
+                        errorText={part.output && "error" in part.output ? String(part.output.error) : undefined}
+                        output={
+                          part.output && !("error" in part.output) ? (
+                            <NodeDetailDisplay output={part.output} />
+                          ) : null
+                        }
+                      />
+                    )}
+                  </ToolContent>
+                </Tool>
+              );
+            }
+
+            if (type === "tool-createSuggestion") {
+              const { toolCallId, state } = part;
+
+              return (
+                <Tool defaultOpen={true} key={toolCallId}>
+                  <ToolHeader state={state} type="tool-createSuggestion" />
+                  <ToolContent>
+                    {state === "input-available" && <ToolInput input={part.input} />}
+                    {state === "output-available" && (
+                      <ToolOutput
+                        errorText={part.output && "error" in part.output ? String(part.output.error) : undefined}
+                        output={
+                          part.output && !("error" in part.output) ? (
+                            <SuggestionCreatedDisplay output={part.output} />
+                          ) : null
+                        }
+                      />
+                    )}
+                  </ToolContent>
+                </Tool>
+              );
+            }
+
+            if (type === "tool-updateFrameworkHealth") {
+              const { toolCallId, state } = part;
+
+              return (
+                <Tool defaultOpen={true} key={toolCallId}>
+                  <ToolHeader state={state} type="tool-updateFrameworkHealth" />
+                  <ToolContent>
+                    {state === "input-available" && <ToolInput input={part.input} />}
+                    {state === "output-available" && (
+                      <ToolOutput
+                        errorText={part.output && "error" in part.output ? String(part.output.error) : undefined}
+                        output={
+                          part.output && !("error" in part.output) ? (
+                            <HealthUpdatedDisplay output={part.output} />
+                          ) : null
                         }
                       />
                     )}

@@ -4,13 +4,13 @@ import useSWR from "swr";
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 /**
- * Hook for managing node positions per framework with debounced persistence
+ * Hook for managing node positions per project framework with debounced persistence
  */
-export function useNodePositions(frameworkId: string | null, nodeIds: string[]) {
+export function useNodePositions(projectFrameworkId: string | null, nodeIds: string[]) {
   // Fetch positions from database
   const { data, error, mutate } = useSWR(
-    frameworkId && nodeIds.length > 0
-      ? `/api/canvas/positions?frameworkId=${frameworkId}&nodeIds=${nodeIds.join(",")}`
+    projectFrameworkId && nodeIds.length > 0
+      ? `/api/canvas/positions?projectFrameworkId=${projectFrameworkId}&nodeIds=${nodeIds.join(",")}`
       : null,
     fetcher,
     {
@@ -29,7 +29,7 @@ export function useNodePositions(frameworkId: string | null, nodeIds: string[]) 
    */
   const savePositions = useCallback(
     (positions: Array<{ nodeId: string; x: number; y: number }>) => {
-      if (!frameworkId) return;
+      if (!projectFrameworkId) return;
 
       // Merge with pending positions (newer positions override older ones)
       const positionsMap = new Map(
@@ -48,7 +48,7 @@ export function useNodePositions(frameworkId: string | null, nodeIds: string[]) 
         pendingPositionsRef.current = [];
 
         console.log("[useNodePositions] Saving positions to database:", {
-          frameworkId,
+          projectFrameworkId,
           count: toSave.length,
         });
 
@@ -56,7 +56,7 @@ export function useNodePositions(frameworkId: string | null, nodeIds: string[]) 
           await fetch("/api/canvas/positions", {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ frameworkId, positions: toSave }),
+            body: JSON.stringify({ projectFrameworkId, positions: toSave }),
           });
 
           // Revalidate cache
@@ -66,14 +66,14 @@ export function useNodePositions(frameworkId: string | null, nodeIds: string[]) 
         }
       }, 2000); // 2 second debounce
     },
-    [frameworkId, mutate]
+    [projectFrameworkId, mutate]
   );
 
   /**
    * Force immediate save (useful for framework switch)
    */
   const saveImmediately = useCallback(async () => {
-    if (!frameworkId || pendingPositionsRef.current.length === 0) return;
+    if (!projectFrameworkId || pendingPositionsRef.current.length === 0) return;
 
     // Clear timeout
     if (saveTimeoutRef.current) {
@@ -85,7 +85,7 @@ export function useNodePositions(frameworkId: string | null, nodeIds: string[]) 
     pendingPositionsRef.current = [];
 
     console.log("[useNodePositions] Force saving positions immediately:", {
-      frameworkId,
+      projectFrameworkId,
       count: toSave.length,
     });
 
@@ -93,14 +93,14 @@ export function useNodePositions(frameworkId: string | null, nodeIds: string[]) 
       await fetch("/api/canvas/positions", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ frameworkId, positions: toSave }),
+        body: JSON.stringify({ projectFrameworkId, positions: toSave }),
       });
 
       mutate();
     } catch (error) {
       console.error("[useNodePositions] Failed to save positions:", error);
     }
-  }, [frameworkId, mutate]);
+  }, [projectFrameworkId, mutate]);
 
   return {
     positions: data?.positions || {}, // { nodeId: { x, y } }

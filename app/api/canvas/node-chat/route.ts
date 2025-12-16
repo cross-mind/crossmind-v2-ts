@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/app/(auth)/auth";
 import {
-  getChatSessionByNodeId,
-  createChatSession,
-  getMessagesByChatSessionId,
+  getChatByNodeId,
+  createChatForNode,
+  getMessagesByChatId,
   getCanvasNodeById,
 } from "@/lib/db/queries";
 import { ChatSDKError } from "@/lib/errors";
@@ -12,10 +12,10 @@ import { convertToUIMessages } from "@/lib/utils";
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/canvas/chat-session?nodeId={nodeId}
+ * GET /api/canvas/node-chat?nodeId={nodeId}
  *
- * Finds or creates a chat session for the given canvas node
- * Returns: { sessionId: string, messages: ChatMessage[] }
+ * Finds or creates a chat for the given canvas node
+ * Returns: { chatId: string, messages: ChatMessage[] }
  */
 export async function GET(request: Request) {
   try {
@@ -45,29 +45,29 @@ export async function GET(request: Request) {
       );
     }
 
-    // 4. Find existing chat session or create new one
-    let chatSession = await getChatSessionByNodeId({ nodeId });
+    // 4. Find existing chat or create new one
+    let chat = await getChatByNodeId({ nodeId });
 
-    if (!chatSession) {
-      // Create new chat session
-      chatSession = await createChatSession({
+    if (!chat) {
+      // Create new chat for this node
+      chat = await createChatForNode({
         projectId: node.projectId,
         canvasNodeId: nodeId,
         userId: session.user.id,
       });
     }
 
-    // 5. Load messages for this session
-    const messagesFromDb = await getMessagesByChatSessionId({ id: chatSession.id });
+    // 5. Load messages for this chat
+    const messagesFromDb = await getMessagesByChatId({ id: chat.id });
     const uiMessages = convertToUIMessages(messagesFromDb);
 
-    // 6. Return session info
+    // 6. Return chat info
     return NextResponse.json({
-      sessionId: chatSession.id,
+      chatId: chat.id,
       messages: uiMessages,
     });
   } catch (error) {
-    console.error("[Canvas Chat Session API] Error:", error);
+    console.error("[Canvas Node Chat API] Error:", error);
 
     if (error instanceof ChatSDKError) {
       return error.toResponse();

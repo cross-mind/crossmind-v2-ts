@@ -76,25 +76,38 @@ const groupChatsByDate = (chats: Chat[]): GroupedChats => {
   );
 };
 
-export function getChatHistoryPaginationKey(pageIndex: number, previousPageData: ChatHistory) {
-  if (previousPageData && previousPageData.hasMore === false) {
-    return null;
-  }
+export function getChatHistoryPaginationKey(
+  projectId: string | null | undefined
+) {
+  return (pageIndex: number, previousPageData: ChatHistory) => {
+    if (previousPageData && previousPageData.hasMore === false) {
+      return null;
+    }
 
-  if (pageIndex === 0) {
-    return `/api/history?limit=${PAGE_SIZE}`;
-  }
+    const baseUrl = `/api/history?limit=${PAGE_SIZE}`;
+    const projectParam = projectId ? `&projectId=${projectId}` : "";
 
-  const firstChatFromPage = previousPageData.chats.at(-1);
+    if (pageIndex === 0) {
+      return `${baseUrl}${projectParam}`;
+    }
 
-  if (!firstChatFromPage) {
-    return null;
-  }
+    const firstChatFromPage = previousPageData.chats.at(-1);
 
-  return `/api/history?ending_before=${firstChatFromPage.id}&limit=${PAGE_SIZE}`;
+    if (!firstChatFromPage) {
+      return null;
+    }
+
+    return `/api/history?ending_before=${firstChatFromPage.id}&limit=${PAGE_SIZE}${projectParam}`;
+  };
 }
 
-export function SidebarHistory({ user }: { user: User | undefined }) {
+export function SidebarHistory({
+  user,
+  projectId,
+}: {
+  user: User | undefined;
+  projectId?: string | null;
+}) {
   const { setOpenMobile } = useSidebar();
   const { id } = useParams();
 
@@ -104,7 +117,7 @@ export function SidebarHistory({ user }: { user: User | undefined }) {
     isValidating,
     isLoading,
     mutate,
-  } = useSWRInfinite<ChatHistory>(getChatHistoryPaginationKey, fetcher, {
+  } = useSWRInfinite<ChatHistory>(getChatHistoryPaginationKey(projectId), fetcher, {
     fallbackData: [],
   });
 

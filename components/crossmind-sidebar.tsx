@@ -168,8 +168,15 @@ export function CrossMindSidebar({ user }: { user: User | undefined }) {
 
             console.log("[Sidebar] No currentProjectId, setting project:", targetProject.name);
             setCurrentProject(targetProject);
-            // Update URL to include the projectId
-            router.replace(`/canvas?projectId=${targetProject.id}`);
+
+            // Only redirect to Canvas if we're on the Canvas page or root page
+            // Don't redirect if we're on chat pages or other routes
+            if (pathname === "/canvas" || pathname === "/") {
+              console.log("[Sidebar] Auto-redirecting to Canvas with projectId");
+              router.replace(`/canvas?projectId=${targetProject.id}`);
+            } else {
+              console.log("[Sidebar] Not on Canvas/root, skipping auto-redirect. Current path:", pathname);
+            }
           } else {
             console.log("[Sidebar] No projects found, clearing current project");
             setCurrentProject(null);
@@ -192,10 +199,10 @@ export function CrossMindSidebar({ user }: { user: User | undefined }) {
   const handleSwitchProject = (projectId: string) => {
     setOpenMobile(false);
     // Save last accessed project to localStorage
-    if (typeof window !== "undefined") {
-      localStorage.setItem("lastProjectId", projectId);
-      console.log("[Sidebar] Saved last project to localStorage:", projectId);
-    }
+    // if (typeof window !== "undefined") {
+    //   localStorage.setItem("lastProjectId", projectId);
+    //   console.log("[Sidebar] Saved last project to localStorage:", projectId);
+    // }
     router.push(`/canvas?projectId=${projectId}`);
   };
 
@@ -404,7 +411,7 @@ export function CrossMindSidebar({ user }: { user: User | undefined }) {
             <SidebarGroupLabel>AI Chat</SidebarGroupLabel>
             <SidebarGroupContent>
               {user ? (
-                <SidebarHistory user={user} />
+                <SidebarHistory user={user} projectId={currentProject?.id} />
               ) : (
                 <SidebarMenu>
                   <SidebarMenuItem>

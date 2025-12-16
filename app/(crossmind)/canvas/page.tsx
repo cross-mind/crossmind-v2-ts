@@ -74,7 +74,7 @@ export default function CanvasPage() {
 
   // Fetch frameworks and project framework preference
   const { frameworks } = useFrameworks();
-  const { framework: projectFramework, setFramework: setProjectFramework } = useProjectFramework(projectId || "");
+  const { framework: projectFramework, projectFrameworkId, setFramework: setProjectFramework } = useProjectFramework(projectId || "");
 
   // Fetch real Canvas nodes from database
   const { nodes: dbNodes, isLoading, isError, mutate } = useCanvasNodes(projectId);
@@ -503,7 +503,7 @@ export default function CanvasPage() {
   }, [mutateSuggestions]);
 
   const handleGenerateSuggestions = useCallback(async () => {
-    if (!projectId || !currentFramework || isGenerating) return;
+    if (!projectId || !projectFrameworkId || isGenerating) return;
 
     setIsGenerating(true);
     setElapsedTime(0);
@@ -514,45 +514,31 @@ export default function CanvasPage() {
       setElapsedTime(Math.floor((Date.now() - startTime) / 1000));
     }, 1000);
 
-    const controller = new AbortController();
-
-    // Set timeout (60 seconds)
-    const timeoutId = setTimeout(() => {
-      controller.abort();
-      if (generationTimerRef.current) {
-        clearInterval(generationTimerRef.current);
-        generationTimerRef.current = null;
-      }
-      setIsGenerating(false);
-      console.error("[Canvas] Suggestion generation timed out after 60 seconds");
-      toast.error("分析超时", {
-        description: "AI 分析时间过长（超过 60 秒），请稍后重试。",
-      });
-    }, 60000);
-
     try {
-      await canvasApi.suggestions.generate(
-        {
+      // Call health analysis start API
+      const response = await fetch("/api/canvas/health-analysis/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           projectId,
-          frameworkId: currentFramework.id,
-        },
-        controller.signal
-      );
+          projectFrameworkId,
+        }),
+      });
 
-      clearTimeout(timeoutId);
-
-      // Refresh suggestions list
-      await mutateSuggestions();
-    } catch (error) {
-      console.error("[Canvas] Failed to generate suggestions:", error);
-      clearTimeout(timeoutId);
-
-      // Only show error toast if not aborted (timeout already showed toast)
-      if (error instanceof Error && error.name !== 'AbortError') {
-        toast.error("分析失败", {
-          description: "无法生成 AI 建议，请稍后重试。",
-        });
+      if (!response.ok) {
+        throw new Error("Failed to start health analysis session");
       }
+
+      const { chatId } = await response.json();
+
+      // Redirect to chat page with auto-send query to trigger AI analysis
+      const initialQuery = "请开始分析框架健康度";
+      router.push(`/chat/${chatId}?query=${encodeURIComponent(initialQuery)}`);
+    } catch (error) {
+      console.error("[Canvas] Failed to start health analysis:", error);
+      toast.error("启动分析失败", {
+        description: "无法启动健康度分析，请稍后重试。",
+      });
     } finally {
       if (generationTimerRef.current) {
         clearInterval(generationTimerRef.current);
@@ -560,7 +546,7 @@ export default function CanvasPage() {
       }
       setIsGenerating(false);
     }
-  }, [projectId, currentFramework, mutateSuggestions, isGenerating]);
+  }, [projectId, projectFrameworkId, isGenerating, router]);
 
   // Generate suggestions for a specific node
   const handleGenerateNodeSuggestions = useCallback(async (node: CanvasNode) => {

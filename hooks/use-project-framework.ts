@@ -20,6 +20,7 @@ export function useProjectFramework(projectId: string) {
 
   return {
     framework: data?.framework,
+    projectFrameworkId: data?.projectFrameworkId,  // Include projectFrameworkId
     setFramework,
     isLoading: !data && !error,
   };

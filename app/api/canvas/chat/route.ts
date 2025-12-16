@@ -8,6 +8,8 @@ import {
 } from "ai";
 import { unstable_cache as cache } from "next/cache";
 import { after } from "next/server";
+import { observe, updateActiveTrace } from "@langfuse/tracing";
+import { langfuseSpanProcessor } from "@/instrumentation";
 import { createResumableStreamContext, type ResumableStreamContext } from "resumable-stream";
 import type { ModelCatalog } from "tokenlens/core";
 import { fetchModels } from "tokenlens/fetch";
@@ -21,7 +23,7 @@ import { updateNode } from "@/lib/ai/tools/canvas/update-node";
 import { deleteNode } from "@/lib/ai/tools/canvas/delete-node";
 import {
   getCanvasNodeById,
-  getMessagesByChatSessionId,
+  getMessagesByChatId,
   saveMessages,
   getProjectById,
   getProjectFramework,
@@ -81,7 +83,7 @@ function getStreamContext() {
   return globalStreamContext;
 }
 
-export async function POST(request: Request) {
+const canvasChatHandler = async (request: Request) => {
   try {
     // 1. Authenticate user
     const session = await auth();
@@ -115,25 +117,10 @@ export async function POST(request: Request) {
     const framework = await getProjectFramework(nodeContext.projectId);
 
     // 6. Load message history
-    const messagesFromDb = await getMessagesByChatSessionId({ id: sessionId });
+    const messagesFromDb = await getMessagesByChatId({ id: sessionId });
     const uiMessages = [...convertToUIMessages(messagesFromDb), message];
 
-    // 7. Ensure Chat record exists (for backward compatibility with old ChatSessions)
-    const { getChatById, saveChat } = await import("@/lib/db/queries");
-    const existingChat = await getChatById({ id: sessionId });
-    console.log("[Canvas Chat] Checking Chat record:", { sessionId, exists: !!existingChat });
-    if (!existingChat) {
-      console.log("[Canvas Chat] Creating Chat record for session:", sessionId);
-      await saveChat({
-        id: sessionId,
-        userId: session.user.id,
-        title: `Canvas: ${node.title}`,
-        visibility: "private",
-      });
-      console.log("[Canvas Chat] Chat record created successfully");
-    }
-
-    // 8. Save user message
+    // 7. Save user message
     await saveMessages({
       messages: [{
         chatId: sessionId,
@@ -200,6 +187,18 @@ export async function POST(request: Request) {
               context: nodeContext,
             }),
           },
+          experimental_telemetry: {
+            isEnabled: true,
+            functionId: "canvas-chat-stream",
+            metadata: {
+              chatId: sessionId,
+              userId: session.user.id,
+              projectId: nodeContext.projectId,
+              nodeId: nodeContext.nodeId,
+              nodeType: node.type,
+              ...(framework?.name ? { framework: framework.name } : {}),
+            },
+          },
           onFinish: async ({ usage }) => {
             if (!modelCatalog) {
               finalMergedUsage = usage;
@@ -233,6 +232,15 @@ export async function POST(request: Request) {
           })),
         });
       },
+    });
+
+    // Force flush Langfuse traces after streaming completes
+    after(async () => {
+      try {
+        await langfuseSpanProcessor.forceFlush();
+      } catch (error) {
+        console.warn("[Langfuse] Canvas chat flush failed:", error);
+      }
     });
 
     return new Response(stream.pipeThrough(new JsonToSseTransformStream()));

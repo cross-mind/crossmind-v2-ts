@@ -7,7 +7,7 @@ import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Chat } from "@/components/chat";
-import { useChatSession } from "@/hooks/use-chat-session";
+import { useNodeChat } from "@/hooks/use-node-chat";
 import type { CanvasNode } from "../canvas-data";
 import { useCanvas } from "../core/CanvasContext";
 import { NodeDetailHeader } from "./NodeDetailHeader";
@@ -84,8 +84,8 @@ export function NodeDetailPanel({
 
   const config = nodeTypeConfig[selectedNode.type];
 
-  // Load chat session for this node (only when AI Chat tab is active)
-  const { sessionId, initialMessages, isLoading } = useChatSession(
+  // Load chat for this node (only when AI Chat tab is active)
+  const { chatId, initialMessages, isLoading } = useNodeChat(
     showAIChat ? selectedNode.id : null
   );
 
@@ -232,10 +232,10 @@ export function NodeDetailPanel({
               <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
                 Loading chat session...
               </div>
-            ) : sessionId ? (
+            ) : chatId ? (
               <Chat
-                key={pendingAIChatPrompt?.prompt ? `${sessionId}-${pendingAIChatPrompt.nodeId}` : sessionId}
-                id={sessionId}
+                key={pendingAIChatPrompt?.prompt ? `${chatId}-${pendingAIChatPrompt.nodeId}` : chatId}
+                id={chatId}
                 initialMessages={initialMessages}
                 mode="panel"
                 context={{

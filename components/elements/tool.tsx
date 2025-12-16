@@ -50,6 +50,21 @@ const getStatusBadge = (status: ToolUIPart["state"]) => {
   );
 };
 
+const getToolDisplayName = (type: string): string => {
+  const displayNames: Record<string, string> = {
+    "tool-getWeather": "获取天气",
+    "tool-createDocument": "创建文档",
+    "tool-updateDocument": "更新文档",
+    "tool-requestSuggestions": "请求建议",
+    "tool-viewFrameworkZones": "查看框架区域",
+    "tool-viewNode": "查看节点详情",
+    "tool-createSuggestion": "创建改进建议",
+    "tool-updateFrameworkHealth": "更新健康度评分",
+  };
+
+  return displayNames[type] || type;
+};
+
 export const ToolHeader = ({ className, type, state, ...props }: ToolHeaderProps) => (
   <CollapsibleTrigger
     className={cn("flex w-full min-w-0 items-center justify-between gap-2 p-3", className)}
@@ -57,7 +72,7 @@ export const ToolHeader = ({ className, type, state, ...props }: ToolHeaderProps
   >
     <div className="flex min-w-0 flex-1 items-center gap-2">
       <WrenchIcon className="size-4 shrink-0 text-muted-foreground" />
-      <span className="truncate font-medium text-sm">{type}</span>
+      <span className="truncate font-medium text-sm">{getToolDisplayName(type)}</span>
     </div>
     <div className="flex shrink-0 items-center gap-2">
       {getStatusBadge(state)}

@@ -8,7 +8,7 @@ import {
   streamText,
 } from "ai";
 import { unstable_cache as cache } from "next/cache";
-import { after } from "next/server";
+import { withLangfuseTrace, tracedStreamText } from "@/lib/ai/traced-stream";
 import { createResumableStreamContext, type ResumableStreamContext } from "resumable-stream";
 import type { ModelCatalog } from "tokenlens/core";
 import { fetchModels } from "tokenlens/fetch";
@@ -77,7 +77,8 @@ export function getStreamContext() {
   return globalStreamContext;
 }
 
-export async function POST(request: Request) {
+const chatHandler = async (request: Request) => {
+  console.log("[Chat API] Request received");
   let requestBody: PostRequestBody;
 
   try {
@@ -171,7 +172,18 @@ export async function POST(request: Request) {
 
     const stream = createUIMessageStream({
       execute: ({ writer: dataStream }) => {
-        const result = streamText({
+        const result = tracedStreamText({
+          traceMetadata: {
+            name: "chat-stream",
+            sessionId: id,
+            userId: session.user.id,
+            metadata: {
+              modelId: selectedChatModel,
+              visibility: selectedVisibilityType,
+              toolsEnabled: selectedChatModel !== "chat-model-reasoning",
+            },
+            tags: ["chat", selectedVisibilityType],
+          },
           model: myProvider.languageModel(selectedChatModel),
           system: systemPrompt({ selectedChatModel, requestHints }),
           messages: convertToModelMessages(uiMessages),
@@ -189,10 +201,6 @@ export async function POST(request: Request) {
               session,
               dataStream,
             }),
-          },
-          experimental_telemetry: {
-            isEnabled: isProductionEnvironment,
-            functionId: "stream-text",
           },
           onFinish: async ({ usage }) => {
             try {
@@ -293,7 +301,10 @@ export async function POST(request: Request) {
     console.error("Unhandled error in chat API:", error, { vercelId });
     return new ChatSDKError("offline:chat").toResponse();
   }
-}
+};
+
+// Wrap with Langfuse tracing - creates parent trace for entire request
+export const POST = withLangfuseTrace(chatHandler, "chat-api");
 
 export async function DELETE(request: Request) {
   const { searchParams } = new URL(request.url);

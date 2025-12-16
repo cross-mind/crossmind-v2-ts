@@ -1,3 +1,22 @@
+<!-- OPENSPEC:START -->
+# OpenSpec Instructions
+
+These instructions are for AI assistants working in this project.
+
+Always open `@/openspec/AGENTS.md` when the request:
+- Mentions planning or proposals (words like proposal, spec, change, plan)
+- Introduces new capabilities, breaking changes, architecture shifts, or big performance/security work
+- Sounds ambiguous and you need the authoritative spec before coding
+
+Use `@/openspec/AGENTS.md` to learn:
+- How to create and apply change proposals
+- Spec format and conventions
+- Project structure and guidelines
+
+Keep this managed block so 'openspec update' can refresh the instructions.
+
+<!-- OPENSPEC:END -->
+
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
@@ -198,13 +217,21 @@ healthData: jsonb("healthData")         // Health metrics
 **Provider Configuration**: [lib/ai/providers.ts](lib/ai/providers.ts)
 - Uses `customProvider` from Vercel AI SDK
 - Test mode: mock models
-- Production: Vercel AI Gateway with XAI models
+- Production: OpenRouter with Anthropic Claude models
 
 **Models**: [lib/ai/models.ts](lib/ai/models.ts)
 ```typescript
-"chat-model": "Grok Vision" (multimodal)
-"chat-model-reasoning": "Grok Reasoning" (extended thinking with <think> tags)
+"chat-model": anthropic/claude-sonnet-4 (via OpenRouter)
+"chat-model-reasoning": anthropic/claude-sonnet-4 with <thinking> tags
+"title-model": anthropic/claude-sonnet-4
+"artifact-model": anthropic/claude-sonnet-4
 ```
+
+**Why Anthropic Claude via OpenRouter**:
+- Better tool calling compatibility than XAI models
+- Avoids ZodError issues with Vercel AI SDK
+- Supports structured outputs and reasoning middleware
+- Access via OpenRouter proxy (single API key for multiple models)
 
 **Chat Streaming**: [app/(chat)/api/chat/route.ts](app/(chat)/api/chat/route.ts)
 
@@ -455,11 +482,163 @@ Select framework → handleFrameworkChange()
 Required environment variables:
 ```env
 AUTH_SECRET=****                    # Random secret for NextAuth
-AI_GATEWAY_API_KEY=****            # Vercel AI Gateway key
+OPENROUTER_API_KEY=****            # OpenRouter API key (for AI models)
 BLOB_READ_WRITE_TOKEN=****         # Vercel Blob storage token
 POSTGRES_URL=****                  # PostgreSQL connection string
 REDIS_URL=****                     # Redis connection URL (optional)
 ```
+
+**Getting API Keys**:
+- `OPENROUTER_API_KEY`: Get from https://openrouter.ai/
+- `AUTH_SECRET`: Generate with `openssl rand -base64 32`
+- See [.env.example](.env.example) for all available environment variables
+
+## Langfuse AI Observability
+
+**Integration Status**: ✅ Fully integrated and operational
+
+CrossMind uses **Langfuse** for comprehensive AI observability, tracking all LLM calls, tool executions, token usage, and costs.
+
+### Environment Configuration
+
+Required environment variables (already in [.env.example](.env.example)):
+
+```env
+LANGFUSE_SECRET_KEY="sk-lf-..."
+LANGFUSE_PUBLIC_KEY="pk-lf-..."
+LANGFUSE_BASE_URL="https://us.cloud.langfuse.com"
+```
+
+**Getting Langfuse Credentials**:
+1. Sign up at https://cloud.langfuse.com
+2. Create a new project
+3. Copy the Secret Key, Public Key, and Base URL from Settings → API Keys
+
+### What Gets Traced
+
+**Automatic Tracing** (via Vercel AI SDK `experimental_telemetry`):
+- ✅ All `streamText()` LLM calls (general chat, canvas chat, health analysis)
+- ✅ All AI tool executions (createDocument, updateDocument, createNode, etc.)
+- ✅ Token usage (input tokens, output tokens, total tokens)
+- ✅ Model latency and performance metrics
+- ✅ Rich metadata (userId, chatId, projectId, nodeId, framework, etc.)
+
+**What's NOT Traced**:
+- ❌ Regular HTTP API requests (health checks, file uploads, etc.)
+- ❌ Database queries
+- ❌ Non-AI operations
+
+### Architecture
+
+**OTEL Integration** ([instrumentation.ts](instrumentation.ts)):
+- Uses OpenTelemetry with `NodeTracerProvider`
+- `LangfuseSpanProcessor` for trace export
+- 5-second flush interval (optimized for serverless)
+- Graceful degradation when credentials missing
+
+**Automatic Trace Creation**:
+```typescript
+// In chat API routes (app/(chat)/api/chat/route.ts, app/api/canvas/chat/route.ts)
+const result = streamText({
+  model: myProvider.languageModel("chat-model"),
+  experimental_telemetry: {
+    isEnabled: true,
+    functionId: "chat-stream",  // or "canvas-chat-stream"
+    metadata: {
+      chatId: id,
+      userId: session.user.id,
+      modelId: selectedChatModel,
+      // ... additional context
+    },
+  },
+});
+```
+
+**Non-Blocking Flush** (ensures traces sent before serverless termination):
+```typescript
+// Force flush traces after streaming completes
+after(async () => {
+  try {
+    await langfuseSpanProcessor.forceFlush();
+  } catch (error) {
+    console.warn("[Langfuse] Flush failed:", error);
+  }
+});
+```
+
+### Key Implementation Details
+
+**CRITICAL**: Do NOT use `observe()` wrapper from `@langfuse/tracing` on route handlers
+- ❌ Wrong: `export const POST = observe(async function handleChatRequest() {...})`
+- ✅ Correct: Use only `experimental_telemetry` in `streamText()` calls
+- **Reason**: `observe()` traces ALL HTTP requests, not just AI operations
+
+**Dual Export Support**:
+- Langfuse for AI-specific observability
+- Optional Vercel Analytics for general application metrics
+- Both can run simultaneously without conflicts
+
+**Coexistence with TokenLens**:
+- TokenLens: Operational tracking (stored in database, shown in UI)
+- Langfuse: Development/debugging observability (cloud-based analytics)
+- Both systems run independently and complement each other
+
+### Viewing Traces
+
+1. Log into Langfuse dashboard: https://cloud.langfuse.com
+2. Select your project
+3. Navigate to "Traces" tab
+4. Filter by:
+   - User ID: Search for specific users
+   - Function ID: `chat-stream`, `canvas-chat-stream`
+   - Metadata: projectId, nodeId, modelId, etc.
+
+**Trace Structure**:
+```
+Parent Trace (chat-stream)
+├── Span: streamText (LLM call)
+│   ├── Input tokens: 150
+│   ├── Output tokens: 300
+│   └── Latency: 2.5s
+├── Span: createDocument (tool execution)
+│   ├── Input: { title: "...", kind: "text" }
+│   └── Output: { id: "...", content: "..." }
+└── Span: updateDocument (tool execution)
+    └── ...
+```
+
+### Debugging Langfuse
+
+**Check if Langfuse is enabled**:
+```bash
+# Look for startup message in dev server logs
+[Langfuse] Observability enabled ✅
+```
+
+**Common Issues**:
+
+1. **No traces appearing**:
+   - Verify credentials in `.env.local`
+   - Check dev server logs for errors
+   - Ensure you've sent an AI chat message (not just a regular HTTP request)
+   - Wait 5-10 seconds for traces to appear (flush interval)
+
+2. **Missing tool execution spans**:
+   - Verify `experimental_telemetry` is enabled in `streamText()`
+   - Check that tools are actually being called (not just available)
+
+3. **Performance impact**:
+   - Flush happens in `after()` hook (non-blocking)
+   - 5-second interval reduces overhead
+   - Typical overhead: <50ms per request
+
+### Related Files
+
+- [instrumentation.ts](instrumentation.ts) - OTEL configuration
+- [lib/observability/langfuse.ts](lib/observability/langfuse.ts) - Utility functions (currently unused)
+- [app/(chat)/api/chat/route.ts](app/(chat)/api/chat/route.ts) - General chat telemetry
+- [app/api/canvas/chat/route.ts](app/api/canvas/chat/route.ts) - Canvas chat telemetry
+- [openspec/changes/integrate-langfuse-observability/](openspec/changes/integrate-langfuse-observability/) - OpenSpec proposal and specs
 
 ## Documentation
 
@@ -709,6 +888,103 @@ export async function GET(request: Request) {
 
 **Exception**: Use `export const maxDuration = 60` instead if the route needs extended execution time (e.g., streaming endpoints).
 
+## Langfuse 可观测性
+
+CrossMind 使用 Langfuse 进行 AI 可观测性追踪，捕获所有 LLM 调用、工具执行和 token 使用情况。
+
+### 环境配置
+
+在 `.env.local` 中配置 Langfuse 凭证：
+
+```env
+LANGFUSE_SECRET_KEY="sk-lf-..."
+LANGFUSE_PUBLIC_KEY="pk-lf-..."
+LANGFUSE_BASE_URL="https://us.cloud.langfuse.com"
+```
+
+**获取 API 密钥**：
+1. 创建 Langfuse 账号：https://cloud.langfuse.com
+2. 在 Dashboard 中获取 API 密钥
+3. 添加到 `.env.local`
+
+### 自动追踪内容
+
+**General Chat API** ([app/(chat)/api/chat/route.ts](app/(chat)/api/chat/route.ts))：
+- 所有聊天会话（userId, chatId, modelId）
+- 工具执行：`getWeather`, `createDocument`, `updateDocument`, `requestSuggestions`
+- Token 使用和成本
+
+**Canvas Chat API** ([app/api/canvas/chat/route.ts](app/api/canvas/chat/route.ts))：
+- Canvas 上下文（projectId, nodeId, framework）
+- Canvas 工具：`createNode`, `updateNode`, `deleteNode`
+- 节点类型和框架信息
+
+### 追踪元数据结构
+
+```
+Trace (Chat Session)
+├── userId: session.user.id
+├── sessionId: chatId
+├── tags: ["chat" | "canvas", visibility]
+└── metadata
+    ├── projectId (Canvas only)
+    ├── nodeId (Canvas only)
+    ├── modelId: "chat-model" | "chat-model-reasoning"
+    ├── framework (Canvas only)
+    └── toolsEnabled: boolean
+```
+
+### 架构说明
+
+**OTEL 集成**：使用 Langfuse OTEL 集成，通过 Vercel AI SDK 的 `experimental_telemetry` 自动追踪：
+- [instrumentation.ts](instrumentation.ts)：配置 `NodeTracerProvider` + `LangfuseSpanProcessor`
+- 5 秒 flush 间隔，适配流式响应场景
+- 使用 `after()` hook 在响应后非阻塞 flush
+- **仅追踪 AI 操作**：通过 `streamText()` 的 `experimental_telemetry` 自动创建 traces，不使用 `observe()` wrapper
+
+**与 TokenLens 共存**：
+- **TokenLens**（现有）：运营追踪，写入数据库，用于计费和配额
+- **Langfuse**（新）：可观测性追踪，存储在云端，用于分析和调试
+- 两者独立运行，互不冲突
+
+**重要说明**：
+- Langfuse 仅在 `streamText()` 调用时自动创建 trace
+- 不会追踪普通 HTTP 请求或非 AI 操作
+- 所有 AI 工具执行自动作为子 span 追踪
+
+### 调试
+
+**启用 Debug 模式**：
+在开发环境中，Langfuse 自动启用 debug 日志（`NODE_ENV === "development"`）
+
+**查看追踪**：
+- 访问 Langfuse Dashboard：https://cloud.langfuse.com
+- 追踪在请求完成后 5-10 秒内出现
+- 按 userId、chatId、projectId 筛选
+
+**常见问题**：
+1. **追踪未出现**：检查 `.env.local` 中的凭证是否正确
+2. **Flush 失败**：查看服务器日志中的 `[Langfuse] Flush failed` 警告
+3. **性能问题**：Langfuse 在 `after()` 中运行，不阻塞用户请求
+
+### 关键实现细节
+
+**experimental_telemetry 配置**：
+- 在 `streamText()` 中启用 telemetry 自动创建 trace
+- 添加丰富的 metadata：userId, chatId, modelId, projectId, nodeId 等
+- 所有 AI 工具执行自动作为子 span 追踪
+- 仅在 AI 调用时创建 trace，避免追踪普通 HTTP 请求
+
+**forceFlush()**：
+- 在 `after()` hook 中调用，确保追踪在 serverless 函数终止前发送
+- 失败时优雅降级，仅记录警告
+- 非阻塞设计，不影响用户响应时间
+
+**Graceful Degradation**：
+- 缺少凭证时自动禁用 Langfuse
+- 所有 Langfuse 操作包裹在 try-catch 中
+- 追踪失败不影响用户体验
+
 ## Known Issues & Solutions
 
 ### Canvas Component Type System
@@ -725,6 +1001,20 @@ export async function GET(request: Request) {
   - Type tags: `type/feature`, `type/idea`, `type/task`
   - Stage tags: `stage/ideation`, `stage/validation`, `stage/implementation`
 
+### AI Provider Tool Calling Compatibility
+- **Issue**: XAI models via OpenRouter return ZodError when using Vercel AI SDK's tool calling features
+- **Symptoms**:
+  - `ZodError: Invalid input: expected string, received array`
+  - `Invalid option: expected one of 'completed'|'searching'|'in_progress'|'failed'`
+  - API returns 200 OK but fails when calling AI provider
+- **Root Cause**: Message format incompatibility between Vercel AI SDK and XAI models
+- **Solution**: Use Anthropic Claude models via OpenRouter instead of XAI
+- **Configuration**:
+  - Keep `OPENROUTER_API_KEY` in `.env.local`
+  - Provider config in [lib/ai/providers.ts](lib/ai/providers.ts) uses `openrouter("anthropic/claude-sonnet-4")`
+  - Model: `anthropic/claude-sonnet-4` (not XAI models)
+- **Benefits**: Better tool calling compatibility, stable with Vercel AI SDK, single API key for all models
+
 ### Chrome DevTools MCP
 - 连接断开时立即报告用户，不要重试
 - 使用替代测试方法：server logs, curl, test scripts
@@ -736,6 +1026,34 @@ export async function GET(request: Request) {
 ### Database Composite Keys
 - 不能同时有单独的 `id` 主键和复合主键
 - 只保留复合主键：`primaryKey({ columns: [table.a, table.b] })`
+
+### Node.js 25 localStorage SSR Errors
+- **Issue**: Next.js 15.3.8 crashes with `TypeError: localStorage.getItem is not a function` during SSR, causing global 500 errors
+- **Symptoms**:
+  ```
+  (node:XXXXX) Warning: `--localstorage-file` was provided without a valid path
+  [TypeError: localStorage.getItem is not a function]
+  GET / 500 in XXXXms
+  ```
+- **Root Cause**:
+  - Node.js v25.2.1 introduced experimental Web Storage API support
+  - Next.js DevOverlay component attempts to use `localStorage` during server-side rendering
+  - Incompatibility between Node.js 25.x experimental features and Next.js 15.3.8
+- **Solution**: Downgrade to Node.js LTS version
+  ```bash
+  # Use nvm or fnm to switch to Node.js LTS
+  nvm install 22  # or: nvm install 20
+  nvm use 22
+
+  # Verify version
+  node --version  # Should show v22.x.x or v20.x.x
+
+  # Restart dev server
+  pnpm dev
+  ```
+- **NOT Recommended**: Configuring `--localstorage-file` flag (adds unnecessary complexity)
+- **When to Upgrade**: Wait for Next.js to add proper Node.js 25 compatibility or Node.js 26 LTS
+- **Related**: This error originated from Next.js internal code, not application code
 
 ### VPN Environment Build Issues
 - **Issue**: Next.js build fails to fetch Google Fonts with SSL certificate errors when using VPN
@@ -767,6 +1085,41 @@ export async function GET(request: Request) {
   - [GitHub #85668](https://github.com/vercel/next.js/issues/85668) - useContext null error
   - [GitHub #82366](https://github.com/vercel/next.js/issues/82366) - 404/500 prerendering
 - **When to Upgrade**: Wait for Next.js 16.1+ stable release with fixes
+
+### Schema-Database Sync Issues
+- **Issue**: Drizzle schema (schema.ts) becomes out of sync with actual database structure after partial rollbacks or incomplete migrations
+- **Symptoms**:
+  - API routes fail with errors like "column does not exist" or "export doesn't exist in target module"
+  - `drizzle-kit push` wants to delete tables/columns with existing data
+  - Import errors for tables that exist in database but not in schema
+- **Root Causes**:
+  1. Rolling back migrations without updating schema definitions
+  2. Deleting table definitions from schema while they still exist in database
+  3. Not verifying database state before schema changes
+- **Prevention Best Practices**:
+  1. **Always check database first**: Use SQL queries to verify actual structure before modifying schema
+     ```bash
+     # Check table columns
+     POSTGRES_URL="..." node -e "..."  # See instrumentation.ts for examples
+     ```
+  2. **Schema reflects reality**: schema.ts should mirror the actual database, not desired state
+  3. **Complete rollbacks**: When rolling back migrations, also rollback all related schema changes
+  4. **Use drizzle-kit pull**: Pull schema from database instead of pushing when uncertain
+     ```bash
+     pnpm db:pull  # Pull current database schema
+     ```
+  5. **Incremental changes**: Modify one table at a time and test immediately
+  6. **Migration verification**: After generating migrations, review SQL before applying
+- **Recovery Steps**:
+  1. Query database to get actual structure of all affected tables
+  2. Add missing table definitions to schema.ts to match database
+  3. Add missing column definitions to existing tables
+  4. Restart dev server to clear Turbopack cache
+  5. Verify all API routes return 200 status codes
+- **Related Files**:
+  - [lib/db/schema.ts](lib/db/schema.ts) - Schema definitions
+  - [lib/db/queries.ts](lib/db/queries.ts) - Query functions using schema
+  - [lib/db/migrations/](lib/db/migrations/) - Migration history
 
 ## Debugging
 

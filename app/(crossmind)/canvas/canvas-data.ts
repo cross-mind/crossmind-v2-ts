@@ -111,6 +111,9 @@ export const ZONE_COLORS = {
   indigo: { base: "#3F51B5", label: "#1A237E" },
   red: { base: "#F44336", label: "#B71C1C" },
   lightGreen: { base: "#8BC34A", label: "#33691E" },
+  gray: { base: "#9E9E9E", label: "#616161" },
+  yellow: { base: "#FFEB3B", label: "#F57F17" },
+  emerald: { base: "#10B981", label: "#047857" },
 } as const;
 
 export type ZoneColorKey = keyof typeof ZONE_COLORS;

@@ -45,6 +45,17 @@ export const chat = pgTable("Chat", {
     .notNull()
     .default("private"),
   lastContext: jsonb("lastContext").$type<AppUsage | null>(),
+
+  // Project association (added via migration 0012)
+  type: varchar("type", { enum: ["chat", "health-analysis"] }),
+  status: varchar("status", { enum: ["active", "archived"] }),
+  projectId: uuid("projectId"),
+  projectFrameworkId: uuid("projectFrameworkId"),
+
+  // Canvas node association (for node-specific chats)
+  canvasNodeId: uuid("canvasNodeId").references(() => canvasNode.id, {
+    onDelete: "set null",
+  }),
 });
 
 export type Chat = InferSelectModel<typeof chat>;
@@ -234,6 +245,7 @@ export const canvasNode = pgTable(
     projectId: uuid("projectId")
       .notNull()
       .references(() => project.id, { onDelete: "cascade" }),
+    projectFrameworkId: uuid("projectFrameworkId"),
 
     // Core fields
     title: text("title").notNull(),
@@ -339,9 +351,8 @@ export const canvasSuggestion = pgTable("CanvasSuggestion", {
     .references(() => project.id, { onDelete: "cascade" }),
 
   // Framework association - suggestions are framework-specific
-  frameworkId: uuid("frameworkId").references(() => framework.id, {
-    onDelete: "set null",
-  }),
+  // Using projectFrameworkId to match actual database schema
+  projectFrameworkId: uuid("projectFrameworkId"),
 
   // Suggestion type - includes conversational content-suggestion
   type: varchar("type", {
@@ -406,6 +417,9 @@ export const canvasSuggestion = pgTable("CanvasSuggestion", {
   appliedById: uuid("appliedById").references(() => user.id),
   dismissedAt: timestamp("dismissedAt"),
   dismissedById: uuid("dismissedById").references(() => user.id),
+
+  // Chat session association (for suggestions from canvas chat)
+  chatId: uuid("chatId").references(() => chat.id, { onDelete: "set null" }),
 
   createdAt: timestamp("createdAt").notNull(),
 });
@@ -604,19 +618,6 @@ export const projectDocument = pgTable("ProjectDocument", {
 export type ProjectDocument = InferSelectModel<typeof projectDocument>;
 
 // Chat Sessions (project-specific)
-export const chatSession = pgTable("ChatSession", {
-  id: uuid("id").primaryKey().notNull().defaultRandom(),
-  projectId: uuid("projectId")
-    .notNull()
-    .references(() => project.id, { onDelete: "cascade" }),
-  userId: uuid("userId").references(() => user.id),
-  canvasNodeId: uuid("canvasNodeId").references(() => canvasNode.id, {
-    onDelete: "set null",
-  }),
-  createdAt: timestamp("createdAt").notNull(),
-});
-
-export type ChatSession = InferSelectModel<typeof chatSession>;
 
 // ========== Framework System ==========
 
@@ -679,6 +680,46 @@ export const frameworkZone = pgTable(
 
 export type FrameworkZone = InferSelectModel<typeof frameworkZone>;
 
+// ProjectFramework table (project-specific framework snapshot)
+export const projectFramework = pgTable("ProjectFramework", {
+  id: uuid("id").primaryKey().notNull().defaultRandom(),
+  projectId: uuid("projectId")
+    .notNull()
+    .references(() => project.id, { onDelete: "cascade" }),
+  sourceFrameworkId: uuid("sourceFrameworkId").references(() => framework.id, {
+    onDelete: "set null",
+  }),
+  name: text("name").notNull(),
+  icon: text("icon").notNull(),
+  description: text("description").notNull(),
+  healthScore: real("healthScore"),
+  lastHealthCheckAt: timestamp("lastHealthCheckAt"),
+  isActive: boolean("isActive").notNull().default(true),
+  createdAt: timestamp("createdAt").notNull(),
+  updatedAt: timestamp("updatedAt").notNull(),
+});
+
+export type ProjectFramework = InferSelectModel<typeof projectFramework>;
+
+// ProjectFrameworkZone table (project-specific framework zones)
+export const projectFrameworkZone = pgTable("ProjectFrameworkZone", {
+  id: uuid("id").primaryKey().notNull().defaultRandom(),
+  projectFrameworkId: uuid("projectFrameworkId")
+    .notNull()
+    .references(() => projectFramework.id, { onDelete: "cascade" }),
+  zoneKey: text("zoneKey").notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  displayOrder: real("displayOrder").notNull(),
+  createdAt: timestamp("createdAt").notNull(),
+  sourceZoneId: uuid("sourceZoneId").references(() => frameworkZone.id, {
+    onDelete: "set null",
+  }),
+  colorKey: text("colorKey"),
+});
+
+export type ProjectFrameworkZone = InferSelectModel<typeof projectFrameworkZone>;
+
 // CanvasNodeZoneAffinity table (normalized node-zone relationships)
 export const canvasNodeZoneAffinity = pgTable(
   "CanvasNodeZoneAffinity",
@@ -722,9 +763,9 @@ export const canvasNodePosition = pgTable(
     nodeId: uuid("nodeId")
       .notNull()
       .references(() => canvasNode.id, { onDelete: "cascade" }),
-    frameworkId: uuid("frameworkId")
+    projectFrameworkId: uuid("projectFrameworkId")
       .notNull()
-      .references(() => framework.id, { onDelete: "cascade" }),
+      .references(() => projectFramework.id, { onDelete: "cascade" }),
 
     x: real("x").notNull(),
     y: real("y").notNull(),
@@ -732,8 +773,8 @@ export const canvasNodePosition = pgTable(
     updatedAt: timestamp("updatedAt").notNull(),
   },
   (table) => ({
-    pk: primaryKey({ columns: [table.nodeId, table.frameworkId] }),
-    frameworkIdx: index("idx_node_position_framework").on(table.frameworkId),
+    pk: primaryKey({ columns: [table.nodeId, table.projectFrameworkId] }),
+    projectFrameworkIdx: index("idx_node_position_project_framework").on(table.projectFrameworkId),
   })
 );
 

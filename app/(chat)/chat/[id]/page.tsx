@@ -50,6 +50,11 @@ async function ChatPage({ params }: { params: Promise<{ id: string }> }) {
   const cookieStore = await cookies();
   const chatModelFromCookie = cookieStore.get("chat-model");
 
+  // Determine API endpoint based on chat type
+  const apiEndpoint = chat.type === "health-analysis"
+    ? "/api/canvas/health-analysis/chat"
+    : "/api/chat";
+
   if (!chatModelFromCookie) {
     return (
       <>
@@ -61,6 +66,7 @@ async function ChatPage({ params }: { params: Promise<{ id: string }> }) {
           initialMessages={uiMessages}
           initialVisibilityType={chat.visibility}
           isReadonly={session?.user?.id !== chat.userId}
+          apiEndpoint={apiEndpoint}
         />
         <DataStreamHandler />
       </>
@@ -77,6 +83,7 @@ async function ChatPage({ params }: { params: Promise<{ id: string }> }) {
         initialMessages={uiMessages}
         initialVisibilityType={chat.visibility}
         isReadonly={session?.user?.id !== chat.userId}
+        apiEndpoint={apiEndpoint}
       />
       <DataStreamHandler />
     </>

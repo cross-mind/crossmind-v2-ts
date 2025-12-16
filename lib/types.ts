@@ -41,6 +41,25 @@ export type CustomUIDataTypes = {
   clear: null;
   finish: null;
   usage: AppUsage;
+  // Health analysis streaming data types
+  "health-suggestion": {
+    suggestionId: string;
+    type: "add-node" | "add-tag" | "refine-content" | "content-suggestion" | "health-issue";
+    title: string;
+    description: string;
+    reason?: string;
+    priority: "low" | "medium" | "high" | "critical";
+    nodeId?: string;
+    actionParams?: any;
+  };
+  "dimension-score": {
+    dimensionKey: string;
+    score: number;
+  };
+  "framework-health": {
+    overallScore: number;
+    insights: string;
+  };
 };
 
 export type ChatMessage = UIMessage<MessageMetadata, CustomUIDataTypes, ChatTools>;

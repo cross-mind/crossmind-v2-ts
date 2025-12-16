@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+// Temporarily disabled Google Fonts due to VPN issues
+// import { Geist, Geist_Mono } from "next/font/google";
 import { Providers } from "@/components/providers";
 
 import "./globals.css";
@@ -14,19 +15,16 @@ export const viewport = {
   maximumScale: 1, // Disable auto-zoom on mobile Safari
 };
 
-const geist = Geist({
-  subsets: ["latin"],
-  display: "swap",
+// Temporarily use system fonts
+const geist = {
   variable: "--font-geist",
-  fallback: ["system-ui", "arial"],
-});
+  className: "",
+};
 
-const geistMono = Geist_Mono({
-  subsets: ["latin"],
-  display: "swap",
+const geistMono = {
   variable: "--font-geist-mono",
-  fallback: ["ui-monospace", "monospace"],
-});
+  className: "",
+};
 
 const LIGHT_THEME_COLOR = "hsl(0 0% 100%)";
 const DARK_THEME_COLOR = "hsl(240deg 10% 3.92%)";
