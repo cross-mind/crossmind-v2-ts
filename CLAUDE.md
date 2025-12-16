@@ -81,13 +81,140 @@ Tier:        pro (500 health checks/month)
 ## Development Commands
 
 ### Core Development
+
+**Development Server with Log Management** (Default):
 ```bash
-pnpm dev              # Start development server on port 8000 with Turbo (fast mode)
+pnpm dev              # Start dev server with log management (runs in background)
+pnpm logs [port]      # View real-time logs (default port: 8000)
+pnpm stop [port]      # Stop dev server (default port: 8000)
+pnpm clean:logs       # Clean all log files
+```
+
+**Direct Development Server** (Original behavior):
+```bash
+pnpm dev:direct       # Start dev server directly (supports pipes, foreground)
+```
+
+**Production**:
+```bash
 pnpm build            # Build for production (runs DB migrations first)
 pnpm start            # Start production server on port 8000
 ```
 
 **IMPORTANT**: Development server runs on http://localhost:8000 (not 3000).
+
+---
+
+### Development Server Usage Guide
+
+#### Standard Development (Recommended)
+
+Use `pnpm dev` for normal development. This provides:
+- **Background execution**: Terminal is freed after startup
+- **Persistent logs**: All output saved to `.logs/dev-server-{port}.log`
+- **Multi-instance support**: Run multiple dev servers on different ports
+- **Process management**: Automatic PID tracking and graceful shutdown
+
+**Workflow**:
+```bash
+# 1. Start dev server (runs in background)
+pnpm dev
+
+# 2. View logs in real-time (in another terminal)
+pnpm logs 8000
+
+# 3. Stop server when done
+pnpm stop 8000
+```
+
+**When port is occupied**, interactive menu with 5 options:
+1. **Restart** - Force restart on same port
+2. **New port** - Auto-find next available port (8001, 8002, etc.)
+3. **Custom port** - Specify your own port
+4. **View logs** - See current instance logs immediately
+5. **Cancel** - Exit without changes
+
+#### Direct Mode (For Special Cases)
+
+Use `pnpm dev:direct` when you need:
+- **Pipe operations**: `pnpm dev:direct | tee output.log`
+- **Output redirection**: `pnpm dev:direct > mylog.txt 2>&1`
+- **Foreground execution**: Keep server in current terminal
+- **CI/CD pipelines**: Avoid interactive prompts
+
+**Example scenarios**:
+```bash
+# Capture both stdout and stderr
+pnpm dev:direct 2>&1 | tee full-output.log
+
+# Grep for specific messages
+pnpm dev:direct 2>&1 | grep -i "error"
+
+# Run with nohup (alternative to pnpm dev)
+nohup pnpm dev:direct > server.log 2>&1 &
+```
+
+#### Multi-Instance Development
+
+Run multiple dev servers for parallel development (e.g., working on different features):
+
+```bash
+# Terminal 1: Start first instance
+pnpm dev              # Uses port 8000
+
+# Terminal 2: Start second instance
+pnpm dev              # Prompts for conflict, select "Use next available port" → 8001
+
+# Terminal 3: View logs from first instance
+pnpm logs 8000
+
+# Terminal 4: View logs from second instance
+pnpm logs 8001
+
+# Stop specific instance
+pnpm stop 8001        # Stop only port 8001, keep 8000 running
+```
+
+**Log files location**: Each instance has isolated logs:
+- `.logs/dev-server-8000.log`
+- `.logs/dev-server-8001.log`
+- `.logs/.lock-8000` (PID tracking)
+- `.logs/.lock-8001` (PID tracking)
+
+#### Important Notes
+
+**⚠️ DO NOT redirect `pnpm dev` output**:
+```bash
+# ❌ WRONG - Breaks log management
+pnpm dev > output.log
+pnpm dev | tee output.log
+
+# ✅ CORRECT - Use direct mode for pipes
+pnpm dev:direct > output.log
+pnpm dev:direct | tee output.log
+
+# ✅ OR - Use managed logs
+pnpm dev              # Start with management
+pnpm logs 8000        # View in real-time
+```
+
+**Why?** `pnpm dev` expects interactive terminal for:
+- Port conflict resolution menu
+- Lock file management
+- Background process detachment
+
+**⚠️ Process management**:
+- Lock files (`.logs/.lock-{port}`) track process PIDs
+- If system crashes, stale locks may remain
+- `pnpm dev` auto-detects and cleans stale locks
+- Manual cleanup: `pnpm clean:logs` or `rm .logs/.lock-*`
+
+**⚠️ Playwright compatibility**:
+- Playwright tests work with both `pnpm dev` and `pnpm dev:direct`
+- Logs are captured in `.logs/` directory when using `pnpm dev`
+- Use `pnpm logs 8000` during test debugging
+
+---
 
 ### Database Management
 ```bash
@@ -568,10 +695,17 @@ after(async () => {
 
 ### Key Implementation Details
 
-**CRITICAL**: Do NOT use `observe()` wrapper from `@langfuse/tracing` on route handlers
+**CRITICAL #1**: Do NOT use `observe()` wrapper from `@langfuse/tracing` on route handlers
 - ❌ Wrong: `export const POST = observe(async function handleChatRequest() {...})`
 - ✅ Correct: Use only `experimental_telemetry` in `streamText()` calls
 - **Reason**: `observe()` traces ALL HTTP requests, not just AI operations
+
+**CRITICAL #2**: Use precise `shouldExportSpan` filter to reduce noise
+- ✅ Correct: Filter by scope - export `scope='ai'`, filter out `scope='next.js'`
+- ❌ Wrong: Complex filters based on span names or parent relationships
+- **Reason**: Scope-based filtering preserves AI SDK spans while removing Next.js infrastructure
+- **Result**: Clean traces with 2 observations (ai.streamText + ai.streamText.doStream) instead of 7+
+- **Implementation**: See [instrumentation.ts:8-30](instrumentation.ts#L8-L30)
 
 **Dual Export Support**:
 - Langfuse for AI-specific observability
@@ -582,6 +716,12 @@ after(async () => {
 - TokenLens: Operational tracking (stored in database, shown in UI)
 - Langfuse: Development/debugging observability (cloud-based analytics)
 - Both systems run independently and complement each other
+
+**Implementation Approach**:
+- Use `NodeTracerProvider` (not `NodeSDK` or `registerOTel` from `@vercel/otel`)
+- Set `exportMode: "immediate"` for instant span export
+- Call `forceFlush()` in `after()` hook for serverless compatibility
+- Pass metadata via `experimental_telemetry.metadata` (userId, sessionId, etc.)
 
 ### Viewing Traces
 
