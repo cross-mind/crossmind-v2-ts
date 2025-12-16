@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, execSync } from "node:child_process";
 import * as fs from "node:fs/promises";
 import { createWriteStream } from "node:fs";
 import * as readline from "node:readline/promises";
@@ -74,6 +74,32 @@ async function removeLock(port: number): Promise<void> {
 	try {
 		await fs.unlink(getLockFile(port));
 	} catch {}
+}
+
+// 查找并停止占用指定端口的所有进程
+function killProcessesOnPort(port: number): void {
+	try {
+		// 使用 lsof 查找占用端口的进程
+		const output = execSync(`lsof -ti:${port}`, {
+			encoding: "utf-8",
+			stdio: ["pipe", "pipe", "ignore"],
+		}).trim();
+
+		if (output) {
+			const pids = output.split("\n").map((pid) => Number.parseInt(pid, 10));
+			for (const pid of pids) {
+				if (!Number.isNaN(pid)) {
+					try {
+						process.kill(pid, "SIGTERM");
+					} catch {
+						// 进程可能已经不存在
+					}
+				}
+			}
+		}
+	} catch {
+		// lsof 可能找不到进程，这是正常的
+	}
 }
 
 // 列出所有运行中的实例
@@ -255,12 +281,26 @@ async function main() {
 					`正在停止端口 ${targetPort} 的服务器 (PID: ${existingPid})...`,
 				);
 				try {
+					// 1. 停止主进程
 					process.kill(existingPid, "SIGTERM");
 					await new Promise((resolve) => setTimeout(resolve, 2000));
+
+					// 2. 如果主进程还在，强制杀死
+					if (isProcessAlive(existingPid)) {
+						process.kill(existingPid, "SIGKILL");
+						await new Promise((resolve) => setTimeout(resolve, 500));
+					}
 				} catch {
 					console.log("进程已不存在");
 				}
+
+				// 3. 清理所有占用该端口的进程（包括子进程）
+				killProcessesOnPort(targetPort);
+				await new Promise((resolve) => setTimeout(resolve, 500));
+
+				// 4. 清理锁文件
 				await removeLock(targetPort);
+				console.log("✓ 已停止旧服务器");
 				break;
 			}
 
