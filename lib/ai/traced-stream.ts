@@ -1,7 +1,6 @@
-import type { StreamTextResult } from "ai";
 import { streamText } from "ai";
 import { after } from "next/server";
-import { observe, updateActiveTrace } from "@langfuse/tracing";
+import { trace, context } from "@opentelemetry/api";
 import { langfuseSpanProcessor } from "@/instrumentation";
 
 /**
@@ -16,18 +15,18 @@ export interface TraceMetadata {
   userId: string;
   /** Additional metadata */
   metadata?: Record<string, any>;
-  /** Tags for filtering traces */
-  tags?: string[];
 }
 
 /**
- * Wrapped streamText() with Langfuse tracing
+ * Wrapped streamText() with Langfuse OTEL tracing
  *
  * This function automatically:
- * 1. Creates a parent trace using observe()
- * 2. Enriches trace with user/session metadata
- * 3. Enables experimental_telemetry for AI SDK auto-tracing
- * 4. Force flushes traces after streaming completes
+ * 1. Enables experimental_telemetry for AI SDK auto-tracing via OTEL
+ * 2. Passes user/session metadata to telemetry
+ * 3. Force flushes traces after streaming completes
+ *
+ * NOTE: Does NOT use Langfuse SDK's observe() or updateActiveTrace()
+ * to avoid tracing all HTTP requests. Only AI operations are traced.
  *
  * @example
  * ```ts
@@ -37,7 +36,6 @@ export interface TraceMetadata {
  *     sessionId: chatId,
  *     userId: session.user.id,
  *     metadata: { modelId: "chat-model" },
- *     tags: ["chat", "private"],
  *   },
  *   model: myProvider.languageModel("chat-model"),
  *   messages,
@@ -45,37 +43,58 @@ export interface TraceMetadata {
  * });
  * ```
  */
-export async function tracedStreamText<
+export function tracedStreamText<
   T extends Parameters<typeof streamText>[0] & { traceMetadata: TraceMetadata }
->(params: T): Promise<StreamTextResult<any>> {
+>(params: T): ReturnType<typeof streamText> {
   const { traceMetadata, ...streamParams } = params;
 
-  // Enrich active trace with metadata
-  updateActiveTrace({
-    name: traceMetadata.name,
-    sessionId: traceMetadata.sessionId,
-    userId: traceMetadata.userId,
-    metadata: traceMetadata.metadata,
-    tags: traceMetadata.tags,
+  // Create a named root span for the trace with Langfuse-specific attributes
+  const tracer = trace.getTracer("langfuse-tracer");
+  const rootSpan = tracer.startSpan(traceMetadata.name, {
+    attributes: {
+      // Standard Langfuse attributes for trace metadata
+      "langfuse.trace.name": traceMetadata.name,
+      "langfuse.trace.userId": traceMetadata.userId,
+      "langfuse.trace.sessionId": traceMetadata.sessionId,
+      // AI SDK telemetry attribute
+      "ai.telemetry.functionId": traceMetadata.name,
+      // Additional metadata
+      ...Object.fromEntries(
+        Object.entries(traceMetadata.metadata || {}).map(([k, v]) => [
+          `langfuse.trace.metadata.${k}`,
+          String(v),
+        ])
+      ),
+    },
   });
 
-  // Ensure experimental_telemetry is enabled
-  const result = await streamText({
-    ...streamParams,
-    experimental_telemetry: {
-      isEnabled: true,
-      functionId: traceMetadata.name,
-      metadata: {
-        userId: traceMetadata.userId,
-        sessionId: traceMetadata.sessionId,
-        ...traceMetadata.metadata,
-      },
+  const telemetryConfig = {
+    isEnabled: true,
+    functionId: traceMetadata.name,
+    metadata: {
+      userId: traceMetadata.userId,
+      sessionId: traceMetadata.sessionId,
+      ...traceMetadata.metadata,
     },
-  } as any);
+    // NOTE: Do NOT pass custom tracer - it breaks Langfuse integration
+    // See: https://github.com/vercel/ai/issues/5120
+    // AI SDK will use the globally registered TracerProvider instead
+  };
 
-  // Force flush after streaming completes
+  // Run streamText in the context of the root span
+  const result = context.with(trace.setSpan(context.active(), rootSpan), () => {
+    // Enable OTEL telemetry - this creates traces ONLY for AI operations
+    // @ts-ignore - experimental_telemetry type mismatch but works at runtime
+    return streamText({
+      ...streamParams,
+      experimental_telemetry: telemetryConfig,
+    });
+  });
+
+  // End root span after streaming completes and force flush
   after(async () => {
     try {
+      rootSpan.end();
       await langfuseSpanProcessor.forceFlush();
       console.log(`[Langfuse] Flushed traces for ${traceMetadata.name}:${traceMetadata.sessionId}`);
     } catch (error) {
@@ -84,18 +103,4 @@ export async function tracedStreamText<
   });
 
   return result;
-}
-
-/**
- * HOF to wrap an entire API handler with Langfuse observe()
- * Use this to create parent traces for streaming endpoints
- */
-export function withLangfuseTrace<T extends (...args: any[]) => Promise<Response>>(
-  handler: T,
-  traceName: string
-): T {
-  return observe(handler, {
-    name: traceName,
-    endOnExit: false, // Keep trace open during SSE streaming
-  }) as T;
 }

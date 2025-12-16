@@ -8,7 +8,7 @@ import {
   streamText,
 } from "ai";
 import { unstable_cache as cache } from "next/cache";
-import { withLangfuseTrace, tracedStreamText } from "@/lib/ai/traced-stream";
+import { tracedStreamText } from "@/lib/ai/traced-stream";
 import { createResumableStreamContext, type ResumableStreamContext } from "resumable-stream";
 import type { ModelCatalog } from "tokenlens/core";
 import { fetchModels } from "tokenlens/fetch";
@@ -182,7 +182,6 @@ const chatHandler = async (request: Request) => {
               visibility: selectedVisibilityType,
               toolsEnabled: selectedChatModel !== "chat-model-reasoning",
             },
-            tags: ["chat", selectedVisibilityType],
           },
           model: myProvider.languageModel(selectedChatModel),
           system: systemPrompt({ selectedChatModel, requestHints }),
@@ -301,10 +300,10 @@ const chatHandler = async (request: Request) => {
     console.error("Unhandled error in chat API:", error, { vercelId });
     return new ChatSDKError("offline:chat").toResponse();
   }
-};
+}
 
-// Wrap with Langfuse tracing - creates parent trace for entire request
-export const POST = withLangfuseTrace(chatHandler, "chat-api");
+// Export directly - Langfuse tracing happens via experimental_telemetry in streamText()
+export const POST = chatHandler;
 
 export async function DELETE(request: Request) {
   const { searchParams } = new URL(request.url);

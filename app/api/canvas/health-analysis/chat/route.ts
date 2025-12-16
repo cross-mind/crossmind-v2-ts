@@ -8,6 +8,8 @@ import {
 } from "ai";
 import { unstable_cache as cache } from "next/cache";
 import { after } from "next/server";
+import { trace, context } from "@opentelemetry/api";
+import { langfuseSpanProcessor } from "@/instrumentation";
 import { createResumableStreamContext, type ResumableStreamContext } from "resumable-stream";
 import type { ModelCatalog } from "tokenlens/core";
 import { fetchModels } from "tokenlens/fetch";
@@ -79,7 +81,7 @@ export function getStreamContext() {
   return globalStreamContext;
 }
 
-export async function POST(request: Request) {
+async function healthAnalysisChatHandler(request: Request) {
   try {
     // 1. Authenticate user
     const session = await auth();
@@ -147,16 +149,6 @@ export async function POST(request: Request) {
     const messagesFromDb = await getMessagesByChatId({ id });
     const uiMessages = [...convertToUIMessages(messagesFromDb), message];
 
-    console.log("[Health Analysis Chat] UI Messages count:", uiMessages.length);
-    console.log("[Health Analysis Chat] Latest message:", JSON.stringify(message, null, 2));
-    if (uiMessages.length > 1) {
-      console.log("[Health Analysis Chat] Previous message:", JSON.stringify(uiMessages[uiMessages.length - 2], null, 2));
-    }
-    // Log all messages to see full conversation structure
-    uiMessages.forEach((msg, idx) => {
-      console.log(`[Health Analysis Chat] UI Message ${idx}:`, JSON.stringify(msg, null, 2));
-    });
-
     // 8. Save user message
     await saveMessages({
       messages: [{
@@ -199,7 +191,22 @@ export async function POST(request: Request) {
 
     const stream = createUIMessageStream({
       execute: ({ writer: dataStream }) => {
-        console.log("[Health Analysis Chat] Starting streamText execution");
+        // Create a named root span for the trace with Langfuse-specific attributes
+        const tracer = trace.getTracer("langfuse-tracer");
+        const rootSpan = tracer.startSpan("health-analysis-chat", {
+          attributes: {
+            // Standard Langfuse attributes
+            "langfuse.trace.name": "health-analysis-chat",
+            "langfuse.trace.userId": session.user.id,
+            "langfuse.trace.sessionId": id,
+            // AI SDK telemetry attribute
+            "ai.telemetry.functionId": "health-analysis-chat",
+            // Project/Framework metadata
+            "langfuse.trace.metadata.projectId": chat.projectId || "unknown",
+            "langfuse.trace.metadata.frameworkId": chat.projectFrameworkId || "unknown",
+            "langfuse.trace.metadata.frameworkName": frameworkData.name,
+          },
+        });
 
         // Filter out UI messages with incomplete tool calls
         const cleanUIMessages = uiMessages.filter((msg) => {
@@ -207,41 +214,23 @@ export async function POST(request: Request) {
             const hasIncompleteToolCall = msg.parts.some((part: any) =>
               part.type?.startsWith('tool-') && part.state === 'input-streaming'
             );
-            if (hasIncompleteToolCall) {
-              console.log("[Health Analysis Chat] Filtered out message with incomplete tool call:", msg.id);
-              return false;
-            }
+            return !hasIncompleteToolCall;
           }
           return true;
         });
-
-        console.log("[Health Analysis Chat] UI Messages:", uiMessages.length, "Clean:", cleanUIMessages.length);
 
         const modelMessages = convertToModelMessages(cleanUIMessages);
 
         // Filter out invalid tool messages (empty content)
         const validModelMessages = modelMessages.filter((msg) => {
           if (msg.role === 'tool') {
-            const hasContent = Array.isArray(msg.content) && msg.content.length > 0;
-            if (!hasContent) {
-              console.log("[Health Analysis Chat] Filtered out invalid tool message with empty content");
-              return false;
-            }
+            return Array.isArray(msg.content) && msg.content.length > 0;
           }
           return true;
         });
 
-        console.log("[Health Analysis Chat] Model messages count:", modelMessages.length, "Valid:", validModelMessages.length);
-
-        // Log each valid model message
-        validModelMessages.forEach((msg, idx) => {
-          console.log(`[Health Analysis Chat] Valid Model Message ${idx}:`, {
-            role: msg.role,
-            contentLength: Array.isArray(msg.content) ? msg.content.length : 'not-array'
-          });
-        });
-
-        const result = streamText({
+        // Run streamText in the context of the root span
+        const result = context.with(trace.setSpan(context.active(), rootSpan), () => streamText({
           model: myProvider.languageModel("chat-model"),
           system: systemPromptText,
           messages: validModelMessages,
@@ -254,6 +243,17 @@ export async function POST(request: Request) {
             "updateFrameworkHealth",
           ],
           experimental_transform: smoothStream({ chunking: "word" }),
+          experimental_telemetry: {
+            isEnabled: true,
+            functionId: "health-analysis-chat",
+            metadata: {
+              userId: session.user.id,
+              sessionId: id,
+              projectId: chat.projectId || "unknown",
+              projectFrameworkId: chat.projectFrameworkId || "unknown",
+              frameworkName: frameworkData.name,
+            },
+          },
           tools: {
             viewFrameworkZones: viewFrameworkZones({
               session,
@@ -274,8 +274,6 @@ export async function POST(request: Request) {
             }),
           },
           onFinish: async ({ usage }) => {
-            console.log("[Health Analysis Chat] Stream finished");
-
             if (!modelCatalog) {
               finalMergedUsage = usage;
               dataStream.write({ type: "data-usage", data: finalMergedUsage });
@@ -289,11 +287,13 @@ export async function POST(request: Request) {
             finalMergedUsage = { ...usage, ...summary, modelId: "chat-model" } as AppUsage;
             dataStream.write({ type: "data-usage", data: finalMergedUsage });
           },
-        });
+        }));
 
-        console.log("[Health Analysis Chat] Consuming stream...");
         result.consumeStream();
         dataStream.merge(result.toUIMessageStream({ sendReasoning: true }));
+
+        // End root span after streaming completes
+        setTimeout(() => rootSpan.end(), 100);
       },
       generateId: generateUUID,
       onFinish: async ({ messages }) => {
@@ -309,6 +309,12 @@ export async function POST(request: Request) {
           })),
         });
       },
+    });
+
+    // Force flush traces before serverless function terminates
+    after(async () => {
+      await langfuseSpanProcessor.forceFlush();
+      console.log("[Langfuse] Flushed traces for health-analysis-chat");
     });
 
     return new Response(stream.pipeThrough(new JsonToSseTransformStream()));
@@ -332,3 +338,6 @@ export async function POST(request: Request) {
     );
   }
 }
+
+// Export POST handler - telemetry handled via experimental_telemetry in streamText
+export const POST = healthAnalysisChatHandler;

@@ -1,9 +1,33 @@
-import { LangfuseSpanProcessor } from "@langfuse/otel";
-import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
-import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+import { LangfuseSpanProcessor, type ShouldExportSpan } from "@langfuse/otel";
 import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import type { SpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { checkDatabaseConnection } from "./lib/db";
+
+// Filter function: only export AI-related spans
+const shouldExportSpan: ShouldExportSpan = (span) => {
+  const scopeName = span.otelSpan.instrumentationScope.name;
+  const spanName = span.otelSpan.name;
+
+  // Export all spans from AI SDK
+  if (scopeName === "ai") {
+    return true;
+  }
+
+  // Export test spans
+  if (scopeName.includes("test")) {
+    return true;
+  }
+
+  // Filter out all Next.js infrastructure spans
+  if (scopeName === "next.js") {
+    return false;
+  }
+
+  // Export everything else (to be safe)
+  return true;
+};
 
 // Export span processor for manual flush in routes
 export const langfuseSpanProcessor = new LangfuseSpanProcessor({
@@ -11,6 +35,8 @@ export const langfuseSpanProcessor = new LangfuseSpanProcessor({
   secretKey: process.env.LANGFUSE_SECRET_KEY,
   baseUrl: process.env.LANGFUSE_BASE_URL,
   flushInterval: 5000, // 5 seconds for streaming scenarios
+  exportMode: "immediate", // Export spans immediately instead of batching
+  shouldExportSpan, // Filter out Next.js infrastructure spans
 });
 
 export function register() {
@@ -63,37 +89,13 @@ export function register() {
     console.log("[Vercel Analytics] OTLP exporter enabled");
   }
 
-  // Create and register tracer provider
+  // Use NodeTracerProvider with manual registration (recommended by Langfuse)
   const tracerProvider = new NodeTracerProvider({
     spanProcessors,
   });
 
   tracerProvider.register();
 
-  console.log("[Instrumentation] TracerProvider registered with", spanProcessors.length, "span processor(s)");
-
-  // Test: Create a simple test span to verify Langfuse connection
-  if (langfuseEnabled) {
-    try {
-      const tracer = tracerProvider.getTracer("test-tracer");
-      const span = tracer.startSpan("test-span");
-      span.setAttribute("test", "initialization");
-      span.end();
-      console.log("[Instrumentation] Test span created");
-
-      // Force flush to send immediately
-      setTimeout(async () => {
-        try {
-          await langfuseSpanProcessor.forceFlush();
-          console.log("[Instrumentation] Test span flushed to Langfuse");
-        } catch (e) {
-          console.error("[Instrumentation] Test span flush failed:", e);
-        }
-      }, 1000);
-    } catch (e) {
-      console.error("[Instrumentation] Failed to create test span:", e);
-    }
-  }
-
+  console.log("[Instrumentation] NodeTracerProvider registered with", spanProcessors.length, "span processor(s)");
   console.log("[Instrumentation] Setup complete");
 }

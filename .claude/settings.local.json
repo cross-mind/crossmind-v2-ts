@@ -28,7 +28,8 @@
       "Bash(pnpm db:push:*)",
       "Bash(npx tsx:*)",
       "Bash(pnpm logs:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(python3:*)"
     ],
     "deny": [],
     "ask": []
