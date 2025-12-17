@@ -1,6 +1,5 @@
 import { spawn, execSync } from "node:child_process";
 import * as fs from "node:fs/promises";
-import { createWriteStream } from "node:fs";
 import * as readline from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import * as path from "node:path";
@@ -74,6 +73,82 @@ async function removeLock(port: number): Promise<void> {
 	try {
 		await fs.unlink(getLockFile(port));
 	} catch {}
+}
+
+// 检查占用端口的进程是否是本项目的
+function checkPortProcess(port: number): {
+	isOurs: boolean;
+	pid: number | null;
+} {
+	try {
+		// 查找占用端口的所有进程 PID
+		const pidOutput = execSync(`lsof -ti:${port}`, {
+			encoding: "utf-8",
+			stdio: ["pipe", "pipe", "ignore"],
+		}).trim();
+
+		if (!pidOutput) {
+			return { isOurs: false, pid: null };
+		}
+
+		const pids = pidOutput.split("\n").map((p) => Number.parseInt(p, 10)).filter((p) => !Number.isNaN(p));
+
+		// 检查所有占用端口的进程
+		for (const pid of pids) {
+			try {
+				// 获取进程的完整命令行
+				const cmdOutput = execSync(`ps -p ${pid} -o command=`, {
+					encoding: "utf-8",
+					stdio: ["pipe", "pipe", "ignore"],
+				}).trim();
+
+				// 检查当前进程是否是 next-server
+				const isNextServer = cmdOutput.includes("next-server");
+
+				// 如果是 next-server 子进程，检查父进程
+				if (isNextServer) {
+					try {
+						const ppidOutput = execSync(`ps -p ${pid} -o ppid=`, {
+							encoding: "utf-8",
+							stdio: ["pipe", "pipe", "ignore"],
+						}).trim();
+
+						const ppid = Number.parseInt(ppidOutput, 10);
+						if (!Number.isNaN(ppid)) {
+							const parentCmd = execSync(`ps -p ${ppid} -o command=`, {
+								encoding: "utf-8",
+								stdio: ["pipe", "pipe", "ignore"],
+							}).trim();
+
+							// 检查父进程是否包含 next dev 和当前项目路径
+							const isNextDev = parentCmd.includes("next") && parentCmd.includes("dev");
+							const isCurrentProject = parentCmd.includes(process.cwd());
+
+							if (isNextDev && isCurrentProject) {
+								return { isOurs: true, pid };
+							}
+						}
+					} catch {
+						// 如果获取父进程失败，继续检查下一个
+					}
+				}
+
+				// 检查当前进程是否包含 next dev 和当前项目路径
+				const isNextDev = cmdOutput.includes("next") && cmdOutput.includes("dev");
+				const isCurrentProject = cmdOutput.includes(process.cwd());
+
+				if (isNextDev && isCurrentProject) {
+					return { isOurs: true, pid };
+				}
+			} catch {
+				// 进程可能已经退出，继续检查下一个
+			}
+		}
+
+		return { isOurs: false, pid: null };
+	} catch {
+		return { isOurs: false, pid: null };
+	}
 }
 
 // 查找并停止占用指定端口的所有进程
@@ -351,7 +426,26 @@ async function main() {
 
 	// 5. 检查端口是否真的可用
 	if (!(await isPortAvailable(targetPort))) {
-		console.error(`端口 ${targetPort} 被其他程序占用`);
+		// 检查是否是本项目的孤儿进程
+		const portInfo = checkPortProcess(targetPort);
+
+		if (portInfo.isOurs && portInfo.pid) {
+			// 本项目的孤儿进程（锁文件丢失）
+			console.error(`\n错误: 端口 ${targetPort} 被本项目的孤儿进程占用 (PID: ${portInfo.pid})`);
+			console.error("锁文件可能已丢失，但进程仍在运行\n");
+			console.error("可用操作：");
+			console.error(`  • 查看日志:       pnpm logs ${targetPort}`);
+			console.error(`  • 停止进程:       kill -9 ${portInfo.pid}`);
+			console.error(`  • 使用其他端口:   pnpm dev ${targetPort + 1}\n`);
+		} else {
+			// 外部程序占用
+			console.error(`\n错误: 端口 ${targetPort} 被其他程序占用，无法启动开发服务器\n`);
+			console.error("可用操作：");
+			console.error(`  • 查看占用进程:   lsof -i:${targetPort}`);
+			console.error(`  • 停止占用进程:   kill -9 $(lsof -ti:${targetPort})`);
+			console.error(`  • 使用其他端口:   pnpm dev ${targetPort + 1}`);
+			console.error(`  • 使用自定义端口: pnpm dev <端口号>\n`);
+		}
 		process.exit(1);
 	}
 
