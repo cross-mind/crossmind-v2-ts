@@ -29,7 +29,6 @@ export function useCanvasLayout({ nodeContents, currentFramework }: UseCanvasLay
     const zoneCount = currentFramework.zones.length;
     const ZONE_WIDTH = 800;
     const ZONE_GAP = 20;
-    const ZONE_ROW_HEIGHT = 1000;
 
     // Smart layout: if more than 5 zones, use grid layout
     let zonesPerRow = zoneCount;
@@ -37,14 +36,14 @@ export function useCanvasLayout({ nodeContents, currentFramework }: UseCanvasLay
       zonesPerRow = zoneCount <= 8 ? 4 : 3;
     }
 
-    // Initialize zone configs with grid positions
+    // Initialize zone configs with grid positions (temporary Y = 0, will be calculated dynamically)
     currentFramework.zones.forEach((zone, index) => {
       const row = Math.floor(index / zonesPerRow);
       const col = index % zonesPerRow;
 
       configs[zone.id] = {
         startX: ZONE_GAP + col * (ZONE_WIDTH + ZONE_GAP),
-        startY: ZONE_GAP + row * ZONE_ROW_HEIGHT,
+        startY: 0,  // Note: This hook is legacy, use LayoutEngine.ts for accurate layout
         columnCount: 2,
         nodeIds: [],
       };

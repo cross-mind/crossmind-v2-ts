@@ -80,7 +80,7 @@ export function CanvasRoot({
       onNodeRestore={onNodeRestore}
       onFrameworkChange={onFrameworkChange}
     >
-      <FilterProvider nodes={nodes} currentFramework={currentFramework}>
+      <FilterProvider>
         <SuggestionProvider
           suggestionsByNode={suggestionsByNode}
           isGenerating={isGenerating}

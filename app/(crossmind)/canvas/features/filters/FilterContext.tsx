@@ -9,6 +9,7 @@
 
 import React, { createContext, useContext, useState, useCallback, useMemo } from "react";
 import type { CanvasNode, ThinkingFramework } from "../../canvas-data";
+import { useCanvas } from "../../core/CanvasContext";
 
 export type StageFilterType = "all" | "ideation" | "research" | "design" | "dev" | "launch";
 
@@ -30,11 +31,11 @@ const FilterContext = createContext<FilterState | null>(null);
 
 export interface FilterProviderProps {
   children: React.ReactNode;
-  nodes: CanvasNode[];
-  currentFramework: ThinkingFramework | null;
 }
 
-export function FilterProvider({ children, nodes, currentFramework }: FilterProviderProps) {
+export function FilterProvider({ children }: FilterProviderProps) {
+  // Get nodes and currentFramework from CanvasContext (with calculated positions)
+  const { nodes, currentFramework } = useCanvas();
   const [stageFilter, setStageFilter] = useState<StageFilterType>("all");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
 

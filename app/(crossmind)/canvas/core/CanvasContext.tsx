@@ -91,6 +91,13 @@ export function CanvasProvider({
     }
   }, [initialFramework]);
 
+  // Sync nodes from external state (when layout calculation completes)
+  useEffect(() => {
+    if (initialNodes.length > 0) {
+      setNodes(initialNodes);
+    }
+  }, [initialNodes]);
+
   // Sync layoutCalculated and zoneBounds from external state
   useEffect(() => {
     setLayoutCalculated(initialLayoutCalculated);

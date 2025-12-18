@@ -51,6 +51,7 @@ export function dbNodeToNodeContent(dbNode: DBCanvasNode): NodeContent {
     children: dbNode.children || [],
     displayOrder: dbNode.displayOrder,
     hiddenInFrameworks: (dbNode as any).hiddenInFrameworks || {},
+    zoneAffinities: dbNode.zoneAffinities || {},
   };
 }
 

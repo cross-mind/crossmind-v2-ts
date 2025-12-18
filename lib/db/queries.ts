@@ -1436,6 +1436,15 @@ export async function createFramework(data: {
  */
 export async function getNodeAffinitiesForFramework(projectId: string, frameworkId: string) {
   try {
+    // CRITICAL FIX: Resolve projectFrameworkId to sourceFrameworkId (same as updateNodeAffinities)
+    const [projectFw] = await db
+      .select({ sourceFrameworkId: projectFramework.sourceFrameworkId })
+      .from(projectFramework)
+      .where(eq(projectFramework.id, frameworkId))
+      .limit(1);
+
+    const platformFrameworkId = projectFw?.sourceFrameworkId || frameworkId;
+
     const results = await db
       .select({
         nodeId: canvasNodeZoneAffinity.nodeId,
@@ -1448,7 +1457,7 @@ export async function getNodeAffinitiesForFramework(projectId: string, framework
       .where(
         and(
           eq(canvasNode.projectId, projectId),
-          eq(canvasNodeZoneAffinity.frameworkId, frameworkId)
+          eq(canvasNodeZoneAffinity.frameworkId, platformFrameworkId) // FIXED: Use platform framework ID
         )
       );
 
@@ -1477,23 +1486,34 @@ export async function updateNodeAffinities(
 ) {
   try {
     return await db.transaction(async (tx) => {
-      // Delete existing affinities for this node-framework pair
+      // CRITICAL FIX: Resolve projectFrameworkId to sourceFrameworkId
+      // Check if frameworkId is a projectFramework (has sourceFrameworkId)
+      const [projectFw] = await tx
+        .select({ sourceFrameworkId: projectFramework.sourceFrameworkId })
+        .from(projectFramework)
+        .where(eq(projectFramework.id, frameworkId))
+        .limit(1);
+
+      // Use sourceFrameworkId if it's a project framework, otherwise use frameworkId directly
+      const platformFrameworkId = projectFw?.sourceFrameworkId || frameworkId;
+
+      // Delete existing affinities for this node-framework pair (use platform framework ID)
       await tx
         .delete(canvasNodeZoneAffinity)
         .where(
           and(
             eq(canvasNodeZoneAffinity.nodeId, nodeId),
-            eq(canvasNodeZoneAffinity.frameworkId, frameworkId)
+            eq(canvasNodeZoneAffinity.frameworkId, platformFrameworkId)
           )
         );
 
       // Insert new affinities
       if (Object.keys(affinities).length > 0) {
-        // First, get zone IDs for the given zoneKeys
+        // First, get zone IDs for the given zoneKeys using platform framework
         const zones = await tx
           .select({ zoneKey: frameworkZone.zoneKey, zoneId: frameworkZone.id })
           .from(frameworkZone)
-          .where(eq(frameworkZone.frameworkId, frameworkId));
+          .where(eq(frameworkZone.frameworkId, platformFrameworkId));
 
         // Build map: zoneKey → zoneId
         const zoneKeyToId = new Map(zones.map(z => [z.zoneKey, z.zoneId]));
@@ -1505,7 +1525,7 @@ export async function updateNodeAffinities(
             if (!zoneId) return null; // Skip invalid zoneKeys
             return {
               nodeId,
-              frameworkId,
+              frameworkId: platformFrameworkId, // FIXED: Use platform framework ID
               zoneId,
               affinityWeight: weight,
               createdAt: new Date(),
@@ -1517,6 +1537,29 @@ export async function updateNodeAffinities(
         if (values.length > 0) {
           await tx.insert(canvasNodeZoneAffinity).values(values);
         }
+      }
+
+      // CRITICAL: Also update the zoneAffinities JSONB field in CanvasNode table
+      // This is what the UI actually reads from
+      const [node] = await tx
+        .select({ zoneAffinities: canvasNode.zoneAffinities })
+        .from(canvasNode)
+        .where(eq(canvasNode.id, nodeId));
+
+      if (node) {
+        const existingAffinities = (node.zoneAffinities as Record<string, Record<string, number>>) || {};
+        const updatedZoneAffinities = {
+          ...existingAffinities,
+          [frameworkId]: affinities,
+        };
+
+        await tx
+          .update(canvasNode)
+          .set({
+            zoneAffinities: updatedZoneAffinities,
+            updatedAt: new Date(),
+          })
+          .where(eq(canvasNode.id, nodeId));
       }
     });
   } catch (error) {

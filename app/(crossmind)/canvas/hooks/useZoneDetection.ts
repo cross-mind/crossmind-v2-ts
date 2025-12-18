@@ -6,10 +6,9 @@
 import { useCallback } from "react";
 import type { ThinkingFramework } from "../canvas-data";
 
-// Canvas layout constants (must match page.tsx)
+// Canvas layout constants (must match LayoutEngine.ts)
 const ZONE_WIDTH = 800;
 const ZONE_GAP = 20;
-const ZONE_ROW_HEIGHT = 1000;
 
 export interface ZoneInfo {
   id: string;

@@ -42,7 +42,6 @@ import { useZoomPan } from "./hooks/useZoomPan";
 import { useZoneDetection } from "./hooks/useZoneDetection";
 import { calculateNextDisplayOrderInZone } from "./lib/canvas-utils";
 import { useCanvasDragDrop } from "./hooks/useCanvasDragDrop";
-import { useNodePositions } from "@/hooks/use-node-positions";
 import { DndContext, DragOverlay, rectIntersection } from "@dnd-kit/core";
 import { useSession } from "next-auth/react";
 import { canvasApi, ApiError } from "@/lib/api/canvas-api";
@@ -59,9 +58,8 @@ import {
 import {
   calculateNodePositions,
   calculateZoneConfigs,
-  hasPersistedPositions,
-  applyPersistedPositions,
   LAYOUT_CONSTANTS,
+  type ZoneLayoutConfig,
 } from "./core/LayoutEngine";
 
 export default function CanvasPage() {
@@ -103,6 +101,7 @@ export default function CanvasPage() {
   const nodeRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const [layoutCalculated, setLayoutCalculated] = useState(false);
   const [zoneBounds, setZoneBounds] = useState<Record<string, { width: number; height: number }>>({});
+  const [calculatedZoneConfigs, setCalculatedZoneConfigs] = useState<Record<string, ZoneLayoutConfig>>({});
   const positionsLoadedRef = useRef(false);
 
   // Track previous data hash to detect changes
@@ -163,12 +162,8 @@ export default function CanvasPage() {
     };
   }, []);
 
-  // Fetch and persist node positions for current framework
+  // Node IDs for reference
   const nodeIds = useMemo(() => nodeContents.map(n => n.id), [nodeContents]);
-  const { positions: persistedPositions, savePositions, saveImmediately, isLoading: positionsLoading } = useNodePositions(
-    currentFramework?.id || null,
-    nodeIds
-  );
 
   // Group suggestions by nodeId for efficient lookup
   const suggestionsByNode = useMemo(() => {
@@ -221,19 +216,16 @@ export default function CanvasPage() {
 
     const currentFrameworkId = currentFramework.id;
 
-    // If framework changed, save current positions immediately and reset layout
+    // If framework changed, reset layout to trigger recalculation
     if (prevFrameworkIdRef.current && prevFrameworkIdRef.current !== currentFrameworkId) {
-      // Save current positions immediately (don't wait for debounce)
-      saveImmediately();
-
-      // Reset layout to trigger reload with new framework's positions
+      // Reset layout to trigger recalculation with new framework's affinities
       setNodes([]);
       setLayoutCalculated(false);
-      positionsLoadedRef.current = false; // Allow loading positions for new framework
+      positionsLoadedRef.current = false; // Allow recalculation for new framework
     }
 
     prevFrameworkIdRef.current = currentFrameworkId;
-  }, [currentFramework, saveImmediately]);
+  }, [currentFramework]);
 
   // Ref to store node creation callback (to avoid circular dependency)
   const onNodeCreatedRef = useRef<((nodeId: string) => void) | null>(null);
@@ -265,11 +257,39 @@ export default function CanvasPage() {
     onNodeCreated: (nodeId) => onNodeCreatedRef.current?.(nodeId),
   });
 
+  // Convert node zoneAffinities to the format expected by LayoutEngine
+  const convertNodeAffinities = useCallback(() => {
+    const result: Record<string, Record<string, number>> = {};
+
+    nodeContents.forEach(node => {
+      if (node.zoneAffinities && currentFramework) {
+        const frameworkAffinities = node.zoneAffinities[currentFramework.id];
+        if (frameworkAffinities) {
+          result[node.id] = frameworkAffinities;
+        }
+      }
+    });
+
+    console.log('[convertNodeAffinities] Current framework:', currentFramework?.id);
+    console.log('[convertNodeAffinities] Node contents sample:', nodeContents[0]);
+    console.log('[convertNodeAffinities] Converted affinities:', result);
+
+    return result;
+  }, [nodeContents, currentFramework]);
+
   // Generate dynamic zone configs using LayoutEngine
   const getDynamicZoneConfigs = useCallback(() => {
+    // Use calculated configs if available (has correct Y offsets from per-row layout)
+    if (Object.keys(calculatedZoneConfigs).length > 0) {
+      return calculatedZoneConfigs;
+    }
+
+    // Fallback to calculation (will have startY: 0, used before first layout pass)
     if (!currentFramework) return {};
-    return calculateZoneConfigs(currentFramework, nodeContents, nodeAffinities);
-  }, [currentFramework, nodeContents, nodeAffinities]);
+    const affinities = convertNodeAffinities();
+    const { configs } = calculateZoneConfigs(currentFramework, nodeContents, affinities);
+    return configs;
+  }, [calculatedZoneConfigs, currentFramework, nodeContents, convertNodeAffinities]);
 
   // Zone detection hook for quick node creation
   const detectZone = useZoneDetection(currentFramework, zoneBounds, getDynamicZoneConfigs);
@@ -785,7 +805,13 @@ export default function CanvasPage() {
 
   // Handle affinity changes (zone reassignment after drag-drop)
   useEffect(() => {
-    const affinityHash = JSON.stringify(nodeAffinities);
+    // Create hash from node zoneAffinities for current framework
+    const affinityHash = JSON.stringify(
+      nodeContents.map(node => ({
+        id: node.id,
+        affinities: node.zoneAffinities?.[currentFramework?.id || ''] || {}
+      }))
+    );
 
     // Only trigger layout recalculation if:
     // 1. Positions have been loaded (not initial load)
@@ -813,7 +839,7 @@ export default function CanvasPage() {
     }
 
     prevAffinityHashRef.current = affinityHash;
-  }, [nodeAffinities, nodes.length]);
+  }, [nodeContents, currentFramework, nodes.length]);
 
   // Reset layout when data changes (e.g., after drag-drop update via SWR)
   useEffect(() => {
@@ -919,16 +945,12 @@ export default function CanvasPage() {
 
   // Calculate layout using LayoutEngine
   useEffect(() => {
-    if (layoutCalculated) {
-      return;
-    }
-
     // Wait for data to load
     if (nodeContents.length === 0) {
       return;
     }
 
-    if (positionsLoading || affinitiesLoading) {
+    if (affinitiesLoading) {
       return;
     }
 
@@ -936,19 +958,8 @@ export default function CanvasPage() {
       return;
     }
 
-    // Check if we should use persisted positions (only once)
+    // Render off-screen for measurement (only once)
     if (!positionsLoadedRef.current) {
-      const positionCheck = hasPersistedPositions(nodeContents, persistedPositions);
-
-      if (positionCheck.hasAll) {
-        const nodesWithPositions = applyPersistedPositions(nodeContents, persistedPositions);
-        setNodes(nodesWithPositions);
-        setLayoutCalculated(true);
-        positionsLoadedRef.current = true;
-        return;
-      }
-
-      // Render off-screen for measurement
       if (nodes.length === 0) {
         const tempNodes = nodeContents.map(content => ({
           ...content,
@@ -963,30 +974,23 @@ export default function CanvasPage() {
 
     // Wait for next frame to ensure DOM is updated
     requestAnimationFrame(() => {
+      // Convert node zoneAffinities to the format expected by LayoutEngine
+      const affinities = convertNodeAffinities();
+
       // Use LayoutEngine to calculate positions
-      const { nodes: calculatedNodes, zoneBounds: calculatedZoneBounds } = calculateNodePositions(
+      const { nodes: calculatedNodes, zoneBounds: calculatedZoneBounds, zoneConfigs: calculatedZoneConfigs } = calculateNodePositions(
         nodeContents,
         currentFramework,
-        nodeAffinities,
+        affinities,
         nodeRefs.current
       );
 
       setNodes(calculatedNodes);
       setZoneBounds(calculatedZoneBounds);
+      setCalculatedZoneConfigs(calculatedZoneConfigs);
       setLayoutCalculated(true);
-
-      // Save calculated positions to database (debounced)
-      const positionsToSave = calculatedNodes
-        .filter(node => !node.parentId && node.position)
-        .map(node => ({
-          nodeId: node.id,
-          x: node.position!.x,
-          y: node.position!.y,
-        }));
-
-      savePositions(positionsToSave);
     });
-  }, [nodeContents, nodes.length, layoutCalculated, currentFramework, nodeAffinities, savePositions, persistedPositions, positionsLoading, affinitiesLoading]);
+  }, [nodeContents, currentFramework, convertNodeAffinities, affinitiesLoading, nodes.length]);
 
   // Node type config
   const nodeTypeConfig = NODE_TYPE_CONFIG;

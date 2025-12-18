@@ -22,6 +22,7 @@ import { SuggestionCard } from "./SuggestionCard";
 interface HealthOverviewProps {
   nodes: NodeContent[];
   suggestions: CanvasSuggestion[];
+  currentFramework: { id: string; name: string; healthScore?: number | null } | null;
   onGenerateSuggestions?: () => void;
   isGenerating?: boolean;
   elapsedTime?: number;
@@ -32,26 +33,32 @@ interface HealthOverviewProps {
 export function HealthOverview({
   nodes,
   suggestions,
+  currentFramework,
   onGenerateSuggestions,
   isGenerating,
   elapsedTime,
   onApplySuggestion,
   onDismissSuggestion,
 }: HealthOverviewProps) {
-  // 计算整体健康度统计
+  // 使用 framework 级别的健康度分数（而不是计算所有节点的平均值）
+  const frameworkHealthScore = currentFramework?.healthScore != null
+    ? Math.round(currentFramework.healthScore)
+    : null;
+
+  // 为了显示节点级别的统计，仍然计算节点健康度（但仅用于详细信息）
   const nodesWithHealth = nodes.filter((n) => n.healthScore != null);
   const criticalNodes = nodesWithHealth.filter((n) => n.healthLevel === "critical");
   const warningNodes = nodesWithHealth.filter((n) => n.healthLevel === "warning");
   const goodNodes = nodesWithHealth.filter((n) => n.healthLevel === "good");
   const excellentNodes = nodesWithHealth.filter((n) => n.healthLevel === "excellent");
 
-  // 计算平均分
-  const avgScore = nodesWithHealth.length > 0
+  // 使用 framework 健康度分数作为总分，如果没有则回退到节点平均值
+  const avgScore = frameworkHealthScore ?? (nodesWithHealth.length > 0
     ? Math.round(
         nodesWithHealth.reduce((sum, n) => sum + normalizeHealthScore(n.healthScore), 0) /
           nodesWithHealth.length
       )
-    : 0;
+    : 0);
 
   const healthLevelColor = avgScore >= 85 ? "text-green-600" : avgScore >= 70 ? "text-blue-600" : avgScore >= 50 ? "text-yellow-600" : "text-red-600";
   const healthLevelBg = avgScore >= 85 ? "bg-green-50" : avgScore >= 70 ? "bg-blue-50" : avgScore >= 50 ? "bg-yellow-50" : "bg-red-50";
@@ -152,7 +159,7 @@ export function HealthOverview({
         <Button variant="outline" className={`gap-2 px-4 h-10 border-border/40 ${healthLevelBg} hover:opacity-80`}>
           <Activity className={`h-4 w-4 ${healthLevelColor}`} />
           <span className="text-sm font-medium">健康度分析</span>
-          {nodesWithHealth.length > 0 && (
+          {(frameworkHealthScore !== null || nodesWithHealth.length > 0) && (
             <span className={`text-sm font-bold ${healthLevelColor}`}>
               {avgScore}/100
             </span>
@@ -172,9 +179,10 @@ export function HealthOverview({
         <div className="space-y-4">
           <div>
             <h4 className="font-semibold mb-1">{allSuggestions.length} 条改进建议</h4>
-            {nodesWithHealth.length > 0 && (
+            {(frameworkHealthScore !== null || nodesWithHealth.length > 0) && (
               <p className="text-xs text-muted-foreground">
-                健康度：{avgScore}/100 · {nodesWithHealth.length} 个节点已评分
+                健康度：{avgScore}/100
+                {nodesWithHealth.length > 0 && ` · ${nodesWithHealth.length} 个节点已评分`}
               </p>
             )}
           </div>

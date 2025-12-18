@@ -9,15 +9,22 @@ import type { NodeContent, CanvasNode, ThinkingFramework, ZoneConfig } from "../
 
 // Layout constants
 export const LAYOUT_CONSTANTS = {
-  ZONE_WIDTH: 800,
-  ZONE_GAP: 20,
-  ZONE_ROW_HEIGHT: 1000,
-  NODE_WIDTH: 320,
-  COLUMN_GAP: 80,
-  VERTICAL_GAP: 30, // Reduced from 40 for more compact layout
-  ZONE_HEADER_HEIGHT: 90,
-  ZONE_PADDING: 40,
-  UNASSIGNED_GAP: 100, // Gap between zones and unassigned nodes
+  // Zone layout
+  ZONE_WIDTH: 800,              // Zone container width
+  ZONE_GAP: 20,                 // Horizontal spacing between zones
+  ZONE_ROW_GAP: 80,             // Vertical spacing between zone rows
+
+  // Node layout
+  NODE_WIDTH: 320,              // Node card width
+  COLUMN_GAP: 80,               // Horizontal spacing between columns within zone
+  VERTICAL_GAP: 30,             // Vertical spacing between nodes (reduced from 40 for compact layout)
+
+  // Zone internals
+  ZONE_HEADER_HEIGHT: 90,       // Zone title area height
+  ZONE_PADDING: 40,             // Padding inside zone bounds
+
+  // Unassigned nodes area
+  UNASSIGNED_GAP: 100,          // Gap between zones and unassigned nodes
 } as const;
 
 /**
@@ -31,6 +38,16 @@ export interface ZoneLayoutConfig {
 }
 
 /**
+ * Row layout information for per-row height calculation
+ */
+interface ZoneRowLayout {
+  rowIndex: number;       // Row index (0, 1, 2...)
+  zoneIds: string[];      // Zone IDs in this row
+  startY: number;         // Top Y coordinate of this row
+  maxHeight: number;      // Maximum zone height in this row
+}
+
+/**
  * Calculate how many zones should be per row based on total zone count
  */
 function calculateZonesPerRow(zoneCount: number): number {
@@ -40,30 +57,40 @@ function calculateZonesPerRow(zoneCount: number): number {
 }
 
 /**
- * Calculate zone grid positions
+ * Calculate zone grid positions and row groupings
  */
 export function calculateZoneConfigs(
   framework: ThinkingFramework,
   nodeContents: NodeContent[],
   nodeAffinities: Record<string, Record<string, number>>
-): Record<string, ZoneLayoutConfig> {
-  const { ZONE_WIDTH, ZONE_GAP, ZONE_ROW_HEIGHT } = LAYOUT_CONSTANTS;
+): {
+  configs: Record<string, ZoneLayoutConfig>;
+  rowGroups: ZoneRowLayout[];
+} {
+  const { ZONE_WIDTH, ZONE_GAP } = LAYOUT_CONSTANTS;
   const configs: Record<string, ZoneLayoutConfig> = {};
+  const rowMap = new Map<number, string[]>();  // Track which zones belong to which row
 
   const zoneCount = framework.zones.length;
   const zonesPerRow = calculateZonesPerRow(zoneCount);
 
-  // Initialize zone configs with grid positions
+  // Initialize zone configs with grid positions (temporary Y = 0)
   framework.zones.forEach((zone, index) => {
     const row = Math.floor(index / zonesPerRow);
     const col = index % zonesPerRow;
 
     configs[zone.id] = {
       startX: ZONE_GAP + col * (ZONE_WIDTH + ZONE_GAP),
-      startY: ZONE_GAP + row * ZONE_ROW_HEIGHT,
+      startY: 0,  // Temporary value, will be calculated based on row heights
       columnCount: 2,
       nodeIds: []
     };
+
+    // Track which zone belongs to which row
+    if (!rowMap.has(row)) {
+      rowMap.set(row, []);
+    }
+    rowMap.get(row)!.push(zone.id);
   });
 
   // Track assigned nodes
@@ -105,25 +132,38 @@ export function calculateZoneConfigs(
     }
   });
 
-  return configs;
+  // Build row groups
+  const rowGroups: ZoneRowLayout[] = [];
+  rowMap.forEach((zoneIds, rowIndex) => {
+    rowGroups.push({
+      rowIndex,
+      zoneIds,
+      startY: 0,        // Will be calculated after measuring zone heights
+      maxHeight: 0,     // Will be calculated after measuring zone heights
+    });
+  });
+
+  return { configs, rowGroups };
 }
 
 /**
- * Calculate positions for nodes within zones
+ * Calculate positions for nodes within zones, applying per-row uniform heights
  */
 export function calculateNodesInZones(
   nodeContents: NodeContent[],
   zoneConfigs: Record<string, ZoneLayoutConfig>,
-  nodeRefs: Map<string, HTMLDivElement>
+  rowGroups: ZoneRowLayout[],
+  nodeRefs: Map<string, HTMLDivElement>,
+  framework: ThinkingFramework | null
 ): {
   nodes: CanvasNode[];
   zoneBounds: Record<string, { width: number; height: number }>;
-  globalMaxHeight: number;
+  rowGroups: ZoneRowLayout[];
 } {
   const { NODE_WIDTH, COLUMN_GAP, VERTICAL_GAP, ZONE_HEADER_HEIGHT, ZONE_PADDING } = LAYOUT_CONSTANTS;
+  const MIN_ZONE_HEIGHT = 170;  // Minimum zone height: Header(90) + Padding(40*2)
   const calculatedNodes: CanvasNode[] = [];
   const calculatedZoneBounds: Record<string, { width: number; height: number }> = {};
-  let globalMaxHeight = 0;
 
   // Process each zone
   for (const [zoneName, config] of Object.entries(zoneConfigs)) {
@@ -131,10 +171,20 @@ export function calculateNodesInZones(
       config.startY + ZONE_HEADER_HEIGHT
     );
 
-    // Get root nodes only
+    // Get root nodes only, excluding hidden nodes in current framework
     const rootNodeIds = config.nodeIds.filter(nodeId => {
       const content = nodeContents.find(n => n.id === nodeId);
-      return content && !content.parentId;
+      if (!content || content.parentId) return false;
+
+      // Check if hidden in current framework
+      if (framework?.id) {
+        const hiddenInFrameworks = (content as any).hiddenInFrameworks;
+        if (hiddenInFrameworks?.[framework.id] === true) {
+          return false;
+        }
+      }
+
+      return true;
     });
 
     // Sort by displayOrder for stable positioning
@@ -167,24 +217,137 @@ export function calculateNodesInZones(
       currentYInColumn[currentColumn] += actualHeight + VERTICAL_GAP;
     });
 
-    // Calculate zone bounds
+    // Calculate zone bounds with minimum height constraint
     const maxHeight = Math.max(...currentYInColumn) - config.startY;
     const zoneWidth = config.columnCount * NODE_WIDTH + (config.columnCount - 1) * COLUMN_GAP + ZONE_PADDING;
 
     calculatedZoneBounds[zoneName] = {
       width: zoneWidth,
-      height: maxHeight + ZONE_PADDING,
+      height: Math.max(maxHeight + ZONE_PADDING, MIN_ZONE_HEIGHT),
+    };
+  }
+
+  // Apply per-row uniform heights
+  const uniformRowGroups = applyRowUniformHeights(rowGroups, calculatedZoneBounds);
+
+  // Calculate cumulative row Y offsets
+  const finalRowGroups = calculateRowYOffsets(uniformRowGroups);
+
+  // Apply uniform heights to zone bounds (within each row)
+  for (const row of finalRowGroups) {
+    for (const zoneId of row.zoneIds) {
+      if (calculatedZoneBounds[zoneId]) {
+        calculatedZoneBounds[zoneId].height = row.maxHeight;
+      }
+    }
+  }
+
+  return { nodes: calculatedNodes, zoneBounds: calculatedZoneBounds, rowGroups: finalRowGroups };
+}
+
+/**
+ * Apply uniform height to zones within each row
+ * @param rowGroups - Row grouping information
+ * @param zoneBounds - Measured zone heights
+ * @returns Updated row groups with maxHeight calculated
+ */
+function applyRowUniformHeights(
+  rowGroups: ZoneRowLayout[],
+  zoneBounds: Record<string, { width: number; height: number }>
+): ZoneRowLayout[] {
+  return rowGroups.map((row) => {
+    // Calculate max height among all zones in this row
+    const maxHeight = Math.max(
+      ...row.zoneIds.map((zoneId) => zoneBounds[zoneId]?.height || 0),
+      0
+    );
+
+    return {
+      ...row,
+      maxHeight,  // Uniform height for this row
+    };
+  });
+}
+
+/**
+ * Calculate cumulative Y offsets for zone rows
+ * @param rowGroups - Row groupings (with maxHeight calculated)
+ * @returns Updated row groups with startY calculated
+ */
+function calculateRowYOffsets(
+  rowGroups: ZoneRowLayout[]
+): ZoneRowLayout[] {
+  const { ZONE_GAP, ZONE_ROW_GAP } = LAYOUT_CONSTANTS;
+  let currentY = ZONE_GAP;  // Start from top gap
+
+  return rowGroups.map((row) => {
+    const updatedRow = {
+      ...row,
+      startY: currentY,
     };
 
-    globalMaxHeight = Math.max(globalMaxHeight, maxHeight + ZONE_PADDING);
-  }
+    // Next row starts at: current Y + current row height + row gap
+    currentY += row.maxHeight + ZONE_ROW_GAP;
 
-  // Apply uniform height to all zones
-  for (const zoneName of Object.keys(calculatedZoneBounds)) {
-    calculatedZoneBounds[zoneName].height = globalMaxHeight;
-  }
+    return updatedRow;
+  });
+}
 
-  return { nodes: calculatedNodes, zoneBounds: calculatedZoneBounds, globalMaxHeight };
+/**
+ * Apply calculated row Y offsets to zone configs and node positions
+ * @param zoneConfigs - Zone configurations
+ * @param rowGroups - Row groups with startY calculated
+ * @param nodes - Node positions
+ * @returns Updated configs and nodes with correct Y coordinates
+ */
+function applyRowYOffsetsToZones(
+  zoneConfigs: Record<string, ZoneLayoutConfig>,
+  rowGroups: ZoneRowLayout[],
+  nodes: CanvasNode[]
+): {
+  configs: Record<string, ZoneLayoutConfig>;
+  nodes: CanvasNode[];
+} {
+  const updatedConfigs = { ...zoneConfigs };
+
+  // Build zone -> row startY mapping
+  const zoneToRowY = new Map<string, number>();
+  rowGroups.forEach((row) => {
+    row.zoneIds.forEach((zoneId) => {
+      zoneToRowY.set(zoneId, row.startY);
+    });
+  });
+
+  // Update zone startY values
+  Object.keys(updatedConfigs).forEach((zoneId) => {
+    const rowStartY = zoneToRowY.get(zoneId);
+    if (rowStartY !== undefined) {
+      updatedConfigs[zoneId].startY = rowStartY;
+    }
+  });
+
+  // Update node Y coordinates based on zone Y offsets
+  const updatedNodes = nodes.map((node) => {
+    const nodeZoneId = Object.entries(updatedConfigs).find(
+      ([_, config]) => config.nodeIds.includes(node.id)
+    )?.[0];
+
+    if (!nodeZoneId || !node.position) return node;
+
+    const oldConfig = zoneConfigs[nodeZoneId];
+    const newConfig = updatedConfigs[nodeZoneId];
+    const yOffset = newConfig.startY - oldConfig.startY;
+
+    return {
+      ...node,
+      position: {
+        x: node.position.x,
+        y: node.position.y + yOffset,
+      },
+    };
+  });
+
+  return { configs: updatedConfigs, nodes: updatedNodes };
 }
 
 /**
@@ -240,8 +403,8 @@ export function calculateUnassignedNodes(
 }
 
 /**
- * Main layout calculation function
- * Combines all layout logic into a single, testable function
+ * Main layout calculation function with per-row dynamic heights
+ * Orchestrates the multi-pass layout algorithm
  */
 export function calculateNodePositions(
   nodeContents: NodeContent[],
@@ -251,34 +414,52 @@ export function calculateNodePositions(
 ): {
   nodes: CanvasNode[];
   zoneBounds: Record<string, { width: number; height: number }>;
+  zoneConfigs: Record<string, ZoneLayoutConfig>;
 } {
   if (!framework || nodeContents.length === 0) {
-    return { nodes: [], zoneBounds: {} };
+    return { nodes: [], zoneBounds: {}, zoneConfigs: {} };
   }
 
-  // Step 1: Calculate zone configurations
-  const zoneConfigs = calculateZoneConfigs(framework, nodeContents, nodeAffinities);
-
-  // Step 2: Calculate positions for nodes in zones
-  const { nodes: zonesNodes, zoneBounds, globalMaxHeight } = calculateNodesInZones(
+  // Pass 1: Calculate zone configurations and row groupings (temporary Y = 0)
+  const { configs: zoneConfigs, rowGroups: initialRowGroups } = calculateZoneConfigs(
+    framework,
     nodeContents,
-    zoneConfigs,
-    nodeRefs
+    nodeAffinities
   );
 
-  // Step 3: Calculate positions for unassigned nodes
-  const unassignedNodes = calculateUnassignedNodes(
+  // Pass 2: Calculate node positions, measure heights, apply per-row uniform heights
+  const {
+    nodes: tempNodes,
+    zoneBounds,
+    rowGroups: measuredRowGroups
+  } = calculateNodesInZones(
     nodeContents,
     zoneConfigs,
+    initialRowGroups,
+    nodeRefs,
+    framework
+  );
+
+  // Pass 3: Apply calculated row Y offsets to zones and nodes
+  const { configs: finalZoneConfigs, nodes: zonesNodes } = applyRowYOffsetsToZones(
+    zoneConfigs,
+    measuredRowGroups,
+    tempNodes
+  );
+
+  // Pass 4: Calculate positions for unassigned nodes (using updated zone configs)
+  const unassignedNodes = calculateUnassignedNodes(
+    nodeContents,
+    finalZoneConfigs,
     framework,
     zoneBounds,
     nodeRefs
   );
 
-  // Step 4: Combine all nodes
+  // Combine all calculated nodes
   const allCalculatedNodes = [...zonesNodes, ...unassignedNodes];
 
-  // Step 5: Add child nodes (don't need positions, rendered inside parents)
+  // Add child nodes (don't need calculated positions, rendered inside parents)
   nodeContents.forEach(content => {
     if (!allCalculatedNodes.find(n => n.id === content.id)) {
       allCalculatedNodes.push({
@@ -291,36 +472,6 @@ export function calculateNodePositions(
   return {
     nodes: allCalculatedNodes,
     zoneBounds,
+    zoneConfigs: finalZoneConfigs,
   };
-}
-
-/**
- * Check if nodes have persisted positions
- */
-export function hasPersistedPositions(
-  nodeContents: NodeContent[],
-  persistedPositions: Record<string, { x: number; y: number }>
-): { hasAll: boolean; hasSome: boolean; coverage: number } {
-  const rootNodes = nodeContents.filter(n => !n.parentId);
-  const nodesWithPositions = rootNodes.filter(n => persistedPositions[n.id]).length;
-  const totalNodes = rootNodes.length;
-
-  return {
-    hasAll: nodesWithPositions === totalNodes && totalNodes > 0,
-    hasSome: nodesWithPositions > 0,
-    coverage: totalNodes > 0 ? nodesWithPositions / totalNodes : 0,
-  };
-}
-
-/**
- * Apply persisted positions to nodes
- */
-export function applyPersistedPositions(
-  nodeContents: NodeContent[],
-  persistedPositions: Record<string, { x: number; y: number }>
-): CanvasNode[] {
-  return nodeContents.map(content => ({
-    ...content,
-    position: persistedPositions[content.id] || { x: -9999, y: -9999 },
-  }));
 }

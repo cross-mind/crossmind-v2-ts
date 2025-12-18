@@ -8,6 +8,10 @@ import * as net from "node:net";
 // 默认端口
 const DEFAULT_PORT = 8000;
 
+// ============================================================================
+// 工具函数
+// ============================================================================
+
 // 生成端口相关的文件路径
 function getLockFile(port: number): string {
 	return path.join(process.cwd(), `.logs/.lock-${port}`);
@@ -250,7 +254,11 @@ async function askCustomPort(): Promise<number | null> {
 	return port;
 }
 
-// 查看日志（复用 view-logs.ts 的逻辑）
+// ============================================================================
+// 命令实现
+// ============================================================================
+
+// 查看日志
 async function viewLogs(port: number): Promise<void> {
 	const logFile = getLogFile(port);
 
@@ -301,8 +309,58 @@ async function viewLogs(port: number): Promise<void> {
 	await new Promise(() => {});
 }
 
-// 主函数
-async function main() {
+// 停止服务器
+async function stopServer(port: number): Promise<void> {
+	console.log(`正在停止端口 ${port} 的服务器...`);
+
+	const pid = await readLock(port);
+
+	if (!pid) {
+		// 没有锁文件，但可能有孤儿进程占用端口
+		console.log(`未找到锁文件，检查端口 ${port} 是否被孤儿进程占用...`);
+		killProcessesOnPort(port);
+		await new Promise((resolve) => setTimeout(resolve, 500));
+		console.log(`✓ 已尝试清理端口 ${port} 上的所有进程`);
+		process.exit(0);
+	}
+
+	if (!isProcessAlive(pid)) {
+		console.log(`进程 ${pid} 已不存在，清理锁文件...`);
+		await removeLock(port);
+		console.log("✓ 锁文件已清理");
+		process.exit(0);
+	}
+
+	try {
+		// 1. 首先停止主进程
+		process.kill(pid, "SIGTERM");
+		console.log(`✓ 已发送停止信号到进程 ${pid}`);
+
+		// 2. 等待 2 秒让进程优雅退出
+		await new Promise((resolve) => setTimeout(resolve, 2000));
+
+		// 3. 如果主进程还活着，强制停止
+		if (isProcessAlive(pid)) {
+			console.log("进程未响应，尝试强制停止...");
+			process.kill(pid, "SIGKILL");
+			await new Promise((resolve) => setTimeout(resolve, 500));
+		}
+
+		// 4. 停止所有占用该端口的进程（包括子进程）
+		killProcessesOnPort(port);
+		await new Promise((resolve) => setTimeout(resolve, 500));
+
+		// 5. 清理锁文件
+		await removeLock(port);
+		console.log(`✓ 已停止端口 ${port} 的服务器`);
+	} catch (err: any) {
+		console.error(`停止服务器失败: ${err.message}`);
+		process.exit(1);
+	}
+}
+
+// 启动开发服务器
+async function startDevServer(port: number): Promise<void> {
 	// 检测非交互环境：CI 环境或没有 TTY
 	const isNonInteractive =
 		process.env.CI === "true" ||
@@ -324,11 +382,7 @@ async function main() {
 	}
 
 	// 3. 确定要使用的端口
-	let targetPort = DEFAULT_PORT;
-	const cliPort = process.argv[2] ? Number.parseInt(process.argv[2], 10) : null;
-	if (cliPort && !Number.isNaN(cliPort)) {
-		targetPort = cliPort;
-	}
+	let targetPort = port;
 
 	// 4. 检查目标端口的锁
 	const existingPid = await readLock(targetPort);
@@ -435,7 +489,7 @@ async function main() {
 			console.error("锁文件可能已丢失，但进程仍在运行\n");
 			console.error("可用操作：");
 			console.error(`  • 查看日志:       pnpm logs ${targetPort}`);
-			console.error(`  • 停止进程:       kill -9 ${portInfo.pid}`);
+			console.error(`  • 停止并重启:     pnpm stop ${targetPort} && pnpm dev`);
 			console.error(`  • 使用其他端口:   pnpm dev ${targetPort + 1}\n`);
 		} else {
 			// 外部程序占用
@@ -492,7 +546,48 @@ async function main() {
 	process.exit(0);
 }
 
+// ============================================================================
+// 命令路由
+// ============================================================================
+
+async function main() {
+	const command = process.argv[2];
+
+	// 判断第一个参数是命令还是端口号
+	const isCommand = command === "stop" || command === "logs";
+
+	// 解析端口参数
+	let port = DEFAULT_PORT;
+	if (isCommand) {
+		// 命令模式：pnpm stop 8000 或 pnpm logs 8000
+		const portArg = process.argv[3];
+		if (portArg) {
+			const parsed = Number.parseInt(portArg, 10);
+			port = Number.isNaN(parsed) ? DEFAULT_PORT : parsed;
+		}
+	} else {
+		// 启动模式：pnpm dev 8001
+		if (command) {
+			const parsed = Number.parseInt(command, 10);
+			port = Number.isNaN(parsed) ? DEFAULT_PORT : parsed;
+		}
+	}
+
+	if (command === "stop") {
+		await stopServer(port);
+		return;
+	}
+
+	if (command === "logs") {
+		await viewLogs(port);
+		return;
+	}
+
+	// 默认命令：启动开发服务器
+	await startDevServer(port);
+}
+
 main().catch((err) => {
-	console.error("启动失败:", err);
+	console.error("执行失败:", err);
 	process.exit(1);
 });

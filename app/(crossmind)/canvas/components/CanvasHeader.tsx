@@ -69,6 +69,7 @@ export function CanvasHeader({
         <HealthOverview
           nodes={nodes}
           suggestions={suggestions}
+          currentFramework={currentFramework}
           onGenerateSuggestions={onGenerateSuggestions}
           isGenerating={isGenerating}
           elapsedTime={elapsedTime}

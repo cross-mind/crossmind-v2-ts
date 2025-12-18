@@ -5,8 +5,8 @@
   "scripts": {
     "dev": "tsx lib/scripts/dev-server.ts",
     "dev:direct": "next dev --turbo -p 8000",
-    "logs": "tsx lib/scripts/view-logs.ts",
-    "stop": "tsx lib/scripts/stop-server.ts",
+    "logs": "tsx lib/scripts/dev-server.ts logs",
+    "stop": "tsx lib/scripts/dev-server.ts stop",
     "clean:logs": "rm -rf .logs",
     "build": "tsx lib/db/migrate && next build --experimental-build-mode=compile",
     "start": "next start -p 8000",
