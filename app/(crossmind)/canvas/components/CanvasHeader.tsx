@@ -7,13 +7,14 @@ import { Button } from "@/components/ui/button";
 import { FrameworkSwitcher } from "./FrameworkSwitcher";
 import { HealthOverview } from "./HealthOverview";
 import type { ThinkingFramework, CanvasNode } from "../canvas-data";
-import type { CanvasSuggestion } from "@/lib/db/schema";
+import type { CanvasSuggestion, ProjectFrameworkHealthDimension } from "@/lib/db/schema";
 
 interface CanvasHeaderProps {
   currentFramework: ThinkingFramework | null;
   onFrameworkChange: (framework: ThinkingFramework) => void;
   nodes: CanvasNode[];
   suggestions: CanvasSuggestion[];
+  dimensions: ProjectFrameworkHealthDimension[];
   suggestionsLoading?: boolean;
   isGenerating?: boolean;
   elapsedTime?: number;
@@ -28,6 +29,7 @@ export function CanvasHeader({
   onFrameworkChange,
   nodes,
   suggestions,
+  dimensions,
   suggestionsLoading,
   isGenerating = false,
   elapsedTime = 0,
@@ -70,6 +72,7 @@ export function CanvasHeader({
           nodes={nodes}
           suggestions={suggestions}
           currentFramework={currentFramework}
+          dimensions={dimensions}
           onGenerateSuggestions={onGenerateSuggestions}
           isGenerating={isGenerating}
           elapsedTime={elapsedTime}

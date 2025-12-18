@@ -720,6 +720,30 @@ export const projectFrameworkZone = pgTable("ProjectFrameworkZone", {
 
 export type ProjectFrameworkZone = InferSelectModel<typeof projectFrameworkZone>;
 
+// ProjectFrameworkHealthDimension table (framework dimension health scores)
+export const projectFrameworkHealthDimension = pgTable(
+  "ProjectFrameworkHealthDimension",
+  {
+    id: uuid("id").primaryKey().notNull().defaultRandom(),
+    projectFrameworkId: uuid("projectFrameworkId")
+      .notNull()
+      .references(() => projectFramework.id, { onDelete: "cascade" }),
+    dimensionKey: text("dimensionKey").notNull(), // e.g., "problem", "solution", "unique-value"
+    score: real("score").notNull(), // 0-100
+    insights: text("insights"), // AI evaluation insights
+    createdAt: timestamp("createdAt").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => ({
+    uniqueIdx: uniqueIndex("idx_project_framework_health_dimension_unique").on(
+      table.projectFrameworkId,
+      table.dimensionKey
+    ),
+  })
+);
+
+export type ProjectFrameworkHealthDimension = InferSelectModel<typeof projectFrameworkHealthDimension>;
+
 // CanvasNodeZoneAffinity table (normalized node-zone relationships)
 export const canvasNodeZoneAffinity = pgTable(
   "CanvasNodeZoneAffinity",

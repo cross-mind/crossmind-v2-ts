@@ -1,9 +1,10 @@
 "use client";
 
-import { Activity, TrendingUp, AlertCircle, Sparkles, Loader2 } from "lucide-react";
+import { Activity, TrendingUp, AlertCircle, Sparkles, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { MOCK_USER, type NodeContent } from "../canvas-data";
 import { normalizeHealthScore } from "../lib/canvas-utils";
-import type { CanvasSuggestion } from "@/lib/db/schema";
+import type { CanvasSuggestion, ProjectFrameworkHealthDimension } from "@/lib/db/schema";
+import { useState } from "react";
 import {
   Popover,
   PopoverContent,
@@ -23,6 +24,7 @@ interface HealthOverviewProps {
   nodes: NodeContent[];
   suggestions: CanvasSuggestion[];
   currentFramework: { id: string; name: string; healthScore?: number | null } | null;
+  dimensions: ProjectFrameworkHealthDimension[];
   onGenerateSuggestions?: () => void;
   isGenerating?: boolean;
   elapsedTime?: number;
@@ -34,12 +36,14 @@ export function HealthOverview({
   nodes,
   suggestions,
   currentFramework,
+  dimensions,
   onGenerateSuggestions,
   isGenerating,
   elapsedTime,
   onApplySuggestion,
   onDismissSuggestion,
 }: HealthOverviewProps) {
+  const [showDimensions, setShowDimensions] = useState(false);
   // 使用 framework 级别的健康度分数（而不是计算所有节点的平均值）
   const frameworkHealthScore = currentFramework?.healthScore != null
     ? Math.round(currentFramework.healthScore)
@@ -180,12 +184,62 @@ export function HealthOverview({
           <div>
             <h4 className="font-semibold mb-1">{allSuggestions.length} 条改进建议</h4>
             {(frameworkHealthScore !== null || nodesWithHealth.length > 0) && (
-              <p className="text-xs text-muted-foreground">
-                健康度：{avgScore}/100
-                {nodesWithHealth.length > 0 && ` · ${nodesWithHealth.length} 个节点已评分`}
-              </p>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">
+                  框架健康度：{avgScore}/100
+                </p>
+                {dimensions.length > 0 && (
+                  <button
+                    onClick={() => setShowDimensions(!showDimensions)}
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {showDimensions ? (
+                      <ChevronUp className="h-3 w-3" />
+                    ) : (
+                      <ChevronDown className="h-3 w-3" />
+                    )}
+                    {dimensions.length} 个维度明细
+                  </button>
+                )}
+              </div>
             )}
           </div>
+
+          {/* 维度明细 - 可展开/收起 */}
+          {showDimensions && dimensions.length > 0 && (
+            <div className="border rounded-md overflow-hidden">
+              <div className="divide-y divide-border/50">
+                {dimensions.map((dimension) => {
+                  const score = Math.round(dimension.score);
+                  const scoreColor = score >= 85 ? "text-green-600" : score >= 70 ? "text-blue-600" : score >= 50 ? "text-yellow-600" : "text-red-600";
+                  const scoreBg = score >= 85 ? "bg-green-50" : score >= 70 ? "bg-blue-50" : score >= 50 ? "bg-yellow-50" : "bg-red-50";
+
+                  return (
+                    <div
+                      key={dimension.id}
+                      className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/40 transition-colors"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium capitalize">
+                          {dimension.dimensionKey.replace(/-/g, " ")}
+                        </p>
+                        {dimension.insights && (
+                          <p className="text-xs text-muted-foreground truncate">
+                            {dimension.insights}
+                          </p>
+                        )}
+                      </div>
+                      <div className={`px-2.5 py-1 rounded ${scoreBg}`}>
+                        <span className={`text-xs font-semibold ${scoreColor}`}>
+                          {score}/100
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* AI 改进建议 - Linear Style */}
           {allSuggestions.length > 0 && (

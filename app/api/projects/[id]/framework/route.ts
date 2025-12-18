@@ -1,5 +1,5 @@
 import { auth } from "@/app/(auth)/auth";
-import { getProjectFramework, setProjectFramework } from "@/lib/db/queries";
+import { getProjectFramework, setProjectFramework, getProjectFrameworkDimensions } from "@/lib/db/queries";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { projectFramework, projectFrameworkZone } from "@/lib/db/schema";
@@ -30,16 +30,19 @@ export async function GET(
     .limit(1);
 
   if (projectFrameworks[0]) {
-    // Return ProjectFramework with zones
+    // Return ProjectFramework with zones and dimension health scores
     const zones = await db
       .select()
       .from(projectFrameworkZone)
       .where(eq(projectFrameworkZone.projectFrameworkId, projectFrameworks[0].id))
       .orderBy(asc(projectFrameworkZone.displayOrder));
 
+    const dimensions = await getProjectFrameworkDimensions(projectFrameworks[0].id);
+
     return Response.json({
       framework: { ...projectFrameworks[0], zones },
       projectFrameworkId: projectFrameworks[0].id,
+      dimensions,
     });
   }
 
@@ -49,6 +52,7 @@ export async function GET(
   return Response.json({
     framework,
     projectFrameworkId: null,
+    dimensions: [], // No dimensions for platform frameworks
   });
 }
 

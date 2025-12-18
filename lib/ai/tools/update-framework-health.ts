@@ -4,7 +4,9 @@ import { z } from "zod";
 import {
   updateProjectFrameworkDimensionScore,
   updateProjectFrameworkHealth,
+  getProjectFrameworkWithZones,
 } from "@/lib/db/queries";
+import { calculateWeightedScore } from "@/lib/canvas/framework-weights";
 import type { ChatMessage } from "@/lib/types";
 
 type UpdateFrameworkHealthProps = {
@@ -32,7 +34,15 @@ export const updateFrameworkHealth = ({
     }),
     execute: async ({ dimensionScores, overallScore, insights }) => {
       try {
-        // 更新各维度评分
+        // Get framework to determine sourceFrameworkId
+        const framework = await getProjectFrameworkWithZones({
+          projectFrameworkId: context.projectFrameworkId,
+        });
+        if (!framework) {
+          return { error: "框架不存在" };
+        }
+
+        // Update each dimension score
         for (const [dimensionKey, score] of Object.entries(dimensionScores)) {
           await updateProjectFrameworkDimensionScore({
             projectFrameworkId: context.projectFrameworkId,
@@ -41,7 +51,7 @@ export const updateFrameworkHealth = ({
             insights: `${dimensionKey}: ${score}/100`,
           });
 
-          // 流式发送维度更新
+          // Stream dimension update
           dataStream.write({
             type: "data-dimension-score",
             data: { dimensionKey, score },
@@ -49,23 +59,32 @@ export const updateFrameworkHealth = ({
           });
         }
 
-        // 更新框架总分
+        // Calculate weighted average score
+        const calculatedScore = calculateWeightedScore(
+          dimensionScores,
+          framework.sourceFrameworkId || "lean-canvas" // fallback to lean-canvas
+        );
+
+        const finalScore = calculatedScore !== null ? Math.round(calculatedScore) : overallScore;
+
+        // Update framework health score
         await updateProjectFrameworkHealth({
           id: context.projectFrameworkId,
-          healthScore: overallScore,
+          healthScore: finalScore,
           lastHealthCheckAt: new Date(),
         });
 
-        // 流式发送总分更新
+        // Stream overall score update
         dataStream.write({
           type: "data-framework-health",
-          data: { overallScore, insights },
-          transient: false, // 持久化
+          data: { overallScore: finalScore, insights },
+          transient: false, // Persist
         });
 
         return {
-          message: `健康度已更新：${overallScore}/100`,
+          message: `健康度已更新：${finalScore}/100（基于 ${Object.keys(dimensionScores).length} 个维度的加权平均）`,
           dimensionCount: Object.keys(dimensionScores).length,
+          calculatedScore: finalScore,
         };
       } catch (error) {
         return {

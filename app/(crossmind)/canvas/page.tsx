@@ -72,7 +72,7 @@ export default function CanvasPage() {
 
   // Fetch frameworks and project framework preference
   const { frameworks } = useFrameworks();
-  const { framework: projectFramework, projectFrameworkId, setFramework: setProjectFramework } = useProjectFramework(projectId || "");
+  const { framework: projectFramework, projectFrameworkId, dimensions: frameworkDimensions, setFramework: setProjectFramework } = useProjectFramework(projectId || "");
 
   // Fetch real Canvas nodes from database
   const { nodes: dbNodes, isLoading, isError, mutate } = useCanvasNodes(projectId);
@@ -1095,6 +1095,7 @@ export default function CanvasPage() {
         onFrameworkChange={handleFrameworkChange}
         nodes={nodes}
         suggestions={dbSuggestions}
+        dimensions={frameworkDimensions}
         suggestionsLoading={suggestionsLoading}
         isGenerating={isGenerating}
         elapsedTime={elapsedTime}

@@ -44,6 +44,8 @@ import {
   type ProjectFramework,
   projectFrameworkZone,
   type ProjectFrameworkZone,
+  projectFrameworkHealthDimension,
+  type ProjectFrameworkHealthDimension,
 } from "./schema";
 import { generateHashedPassword } from "./utils";
 
@@ -1800,23 +1802,47 @@ export async function updateProjectFrameworkDimensionScore({
   insights: string;
 }) {
   try {
-    // Check if ProjectFrameworkHealthDimension table exists
-    const tables = await client`
-      SELECT table_name
-      FROM information_schema.tables
-      WHERE table_schema = 'public'
-      AND table_name = 'ProjectFrameworkHealthDimension';
-    `;
+    const now = new Date();
 
-    if (tables.length === 0) {
-      console.warn("[updateProjectFrameworkDimensionScore] ProjectFrameworkHealthDimension table does not exist, skipping");
-      return;
-    }
-
-    // TODO: Implement dimension score update when table is ready
-    console.log(`[updateProjectFrameworkDimensionScore] Would update dimension ${dimensionKey} to ${score}`);
+    await db
+      .insert(projectFrameworkHealthDimension)
+      .values({
+        projectFrameworkId,
+        dimensionKey,
+        score,
+        insights,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [
+          projectFrameworkHealthDimension.projectFrameworkId,
+          projectFrameworkHealthDimension.dimensionKey,
+        ],
+        set: {
+          score,
+          insights,
+          updatedAt: now,
+        },
+      });
   } catch (_error) {
     throw new ChatSDKError("bad_request:database", "Failed to update framework dimension score");
+  }
+}
+
+/**
+ * Get all dimension scores for a project framework
+ */
+export async function getProjectFrameworkDimensions(
+  projectFrameworkId: string
+): Promise<ProjectFrameworkHealthDimension[]> {
+  try {
+    return await db
+      .select()
+      .from(projectFrameworkHealthDimension)
+      .where(eq(projectFrameworkHealthDimension.projectFrameworkId, projectFrameworkId));
+  } catch (_error) {
+    throw new ChatSDKError("bad_request:database", "Failed to get framework dimensions");
   }
 }
 

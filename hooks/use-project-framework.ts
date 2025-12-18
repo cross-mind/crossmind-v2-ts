@@ -20,7 +20,8 @@ export function useProjectFramework(projectId: string) {
 
   return {
     framework: data?.framework,
-    projectFrameworkId: data?.projectFrameworkId,  // Include projectFrameworkId
+    projectFrameworkId: data?.projectFrameworkId,
+    dimensions: data?.dimensions || [],
     setFramework,
     isLoading: !data && !error,
   };
