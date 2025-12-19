@@ -1,6 +1,6 @@
 "use client";
 
-import { Sparkles, Plus } from "lucide-react";
+import { Sparkles } from "lucide-react";
 import { SidebarToggle } from "@/components/sidebar-toggle";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,6 @@ interface CanvasHeaderProps {
   suggestionsLoading?: boolean;
   isGenerating?: boolean;
   elapsedTime?: number;
-  onCreateNode: () => void;
   onGenerateSuggestions?: () => void;
   onApplySuggestion?: (suggestionId: string) => void;
   onDismissSuggestion?: (suggestionId: string) => void;
@@ -35,7 +34,6 @@ export function CanvasHeader({
   suggestionsLoading,
   isGenerating = false,
   elapsedTime = 0,
-  onCreateNode,
   onGenerateSuggestions,
   onApplySuggestion,
   onDismissSuggestion,
@@ -47,17 +45,6 @@ export function CanvasHeader({
         <Separator orientation="vertical" className="h-4" />
         <Sparkles className="h-4 w-4 text-muted-foreground" />
         <span className="text-sm font-medium">Project Canvas</span>
-        <Separator orientation="vertical" className="h-4" />
-        {/* New Node Button */}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-8 gap-2"
-          onClick={onCreateNode}
-        >
-          <Plus className="h-4 w-4" />
-          New Node
-        </Button>
       </div>
 
       <div className="flex items-center gap-2">

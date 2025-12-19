@@ -24,15 +24,15 @@ export function HealthPopover({ node, children }: HealthPopoverProps) {
   const { dimensions, suggestions } = (healthData || {}) as { dimensions?: any; suggestions?: string[] };
 
   const getScoreIcon = (score: number) => {
-    if (score >= 80) return <CheckCircle2 className="h-4 w-4 text-green-600" />;
-    if (score >= 60) return <AlertCircle className="h-4 w-4 text-yellow-600" />;
-    return <XCircle className="h-4 w-4 text-red-600" />;
+    if (score >= 80) return <CheckCircle2 className="h-4 w-4 text-green-600 dark:text-green-400" />;
+    if (score >= 60) return <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />;
+    return <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />;
   };
 
   const getScoreColor = (score: number) => {
-    if (score >= 80) return "text-green-600";
-    if (score >= 60) return "text-yellow-600";
-    return "text-red-600";
+    if (score >= 80) return "text-green-600 dark:text-green-400";
+    if (score >= 60) return "text-yellow-600 dark:text-yellow-400";
+    return "text-red-600 dark:text-red-400";
   };
 
   return (
@@ -97,7 +97,7 @@ export function HealthPopover({ node, children }: HealthPopoverProps) {
                   ...dimensions.feasibility.issues,
                 ].map((issue, idx) => (
                   <li key={idx} className="text-muted-foreground flex items-start gap-1">
-                    <span className="text-red-500 mt-0.5">•</span>
+                    <span className="text-red-500 dark:text-red-400 mt-0.5">•</span>
                     <span>{issue}</span>
                   </li>
                 ))}
@@ -112,7 +112,7 @@ export function HealthPopover({ node, children }: HealthPopoverProps) {
               <ul className="text-xs space-y-1">
                 {suggestions.map((suggestion, idx) => (
                   <li key={idx} className="text-muted-foreground flex items-start gap-1">
-                    <span className="text-blue-500 mt-0.5">•</span>
+                    <span className="text-blue-500 dark:text-blue-400 mt-0.5">•</span>
                     <span>{suggestion}</span>
                   </li>
                 ))}

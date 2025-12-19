@@ -160,12 +160,14 @@ export function useZoomPan() {
    */
   const handleZoomIn = useCallback(() => {
     const newZoom = Math.min(MAX_ZOOM, zoomRef.current + ZOOM_STEP);
+    zoomRef.current = newZoom; // Update ref for consistency
     applyTransform(panRef.current, newZoom);
     setZoom(newZoom);
   }, [applyTransform]);
 
   const handleZoomOut = useCallback(() => {
     const newZoom = Math.max(MIN_ZOOM, zoomRef.current - ZOOM_STEP);
+    zoomRef.current = newZoom; // Update ref for consistency
     applyTransform(panRef.current, newZoom);
     setZoom(newZoom);
   }, [applyTransform]);
@@ -173,6 +175,8 @@ export function useZoomPan() {
   const handleResetView = useCallback(() => {
     const newZoom = 1;
     const newPan = { x: 0, y: 0 };
+    zoomRef.current = newZoom; // Update ref for consistency
+    panRef.current = newPan; // Update ref for consistency
     applyTransform(newPan, newZoom);
     setZoom(newZoom);
     setPan(newPan);
