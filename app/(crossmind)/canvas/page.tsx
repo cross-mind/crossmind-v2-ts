@@ -74,6 +74,17 @@ export default function CanvasPage() {
   const { frameworks } = useFrameworks();
   const { framework: projectFramework, projectFrameworkId, dimensions: frameworkDimensions, setFramework: setProjectFramework } = useProjectFramework(projectId || "");
 
+  // Debug: Track project framework data changes
+  useEffect(() => {
+    console.log('[Canvas Page] Project Framework data:', {
+      projectFrameworkId,
+      frameworkId: projectFramework?.sourceFrameworkId,
+      frameworkName: projectFramework?.name,
+      healthScore: projectFramework?.healthScore,
+      dimensionsCount: frameworkDimensions?.length || 0,
+    });
+  }, [projectFrameworkId, projectFramework?.sourceFrameworkId, projectFramework?.healthScore, frameworkDimensions?.length]);
+
   // Fetch real Canvas nodes from database
   const { nodes: dbNodes, isLoading, isError, mutate } = useCanvasNodes(projectId);
 
@@ -132,7 +143,7 @@ export default function CanvasPage() {
   // Fetch node affinities for current framework
   const { nodeAffinities, updateAffinity, isLoading: affinitiesLoading } = useNodeAffinities(
     projectId || "",
-    currentFramework?.id || null
+    projectFrameworkId || null
   );
 
   // Fetch suggestions for current framework
@@ -142,9 +153,24 @@ export default function CanvasPage() {
     mutate: mutateSuggestions,
   } = useCanvasSuggestionsByFramework({
     projectId: projectId || "",
-    frameworkId: currentFramework?.id || null,
+    frameworkId: projectFrameworkId || null,
     status: "pending", // Only show pending suggestions
   });
+
+  // Debug: Track framework changes and suggestion data
+  useEffect(() => {
+    console.log('[Canvas Page] Framework/Suggestions state:', {
+      currentFrameworkId: currentFramework?.id,
+      currentFrameworkName: currentFramework?.name,
+      suggestionsCount: dbSuggestions.length,
+      suggestionsLoading,
+      firstSuggestion: dbSuggestions[0] ? {
+        id: dbSuggestions[0].id,
+        title: dbSuggestions[0].title,
+        type: dbSuggestions[0].type,
+      } : null,
+    });
+  }, [currentFramework?.id, dbSuggestions.length, suggestionsLoading]);
 
   // Track suggestion generation state
   const [isGenerating, setIsGenerating] = useState(false);
@@ -261,21 +287,22 @@ export default function CanvasPage() {
   const convertNodeAffinities = useCallback(() => {
     const result: Record<string, Record<string, number>> = {};
 
+    // If no projectFrameworkId, return empty affinities (all nodes will be unassigned)
+    if (!projectFrameworkId) {
+      return result;
+    }
+
     nodeContents.forEach(node => {
-      if (node.zoneAffinities && currentFramework) {
-        const frameworkAffinities = node.zoneAffinities[currentFramework.id];
+      if (node.zoneAffinities) {
+        const frameworkAffinities = node.zoneAffinities[projectFrameworkId];
         if (frameworkAffinities) {
           result[node.id] = frameworkAffinities;
         }
       }
     });
 
-    console.log('[convertNodeAffinities] Current framework:', currentFramework?.id);
-    console.log('[convertNodeAffinities] Node contents sample:', nodeContents[0]);
-    console.log('[convertNodeAffinities] Converted affinities:', result);
-
     return result;
-  }, [nodeContents, currentFramework]);
+  }, [nodeContents, projectFrameworkId]);
 
   // Generate dynamic zone configs using LayoutEngine
   const getDynamicZoneConfigs = useCallback(() => {
@@ -523,7 +550,16 @@ export default function CanvasPage() {
   }, [mutateSuggestions]);
 
   const handleGenerateSuggestions = useCallback(async () => {
-    if (!projectId || !projectFrameworkId || isGenerating) return;
+    console.log('[Canvas] handleGenerateSuggestions called', {
+      projectId,
+      projectFrameworkId,
+      isGenerating,
+    });
+
+    if (!projectId || isGenerating) {
+      console.warn('[Canvas] Early return triggered - missing projectId or already generating');
+      return;
+    }
 
     setIsGenerating(true);
     setElapsedTime(0);
@@ -535,13 +571,13 @@ export default function CanvasPage() {
     }, 1000);
 
     try {
-      // Call health analysis start API
+      // Call health analysis start API (API will create ProjectFramework if needed)
       const response = await fetch("/api/canvas/health-analysis/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           projectId,
-          projectFrameworkId,
+          projectFrameworkId, // Can be null, API will handle it
         }),
       });
 
@@ -767,6 +803,13 @@ export default function CanvasPage() {
 
   // Handle framework change
   const handleFrameworkChange = async (framework: ThinkingFramework) => {
+    console.log('[Canvas Page] Framework change requested:', {
+      oldFrameworkId: currentFramework?.id,
+      newFrameworkId: framework.id,
+      oldFrameworkName: currentFramework?.name,
+      newFrameworkName: framework.name,
+    });
+
     setCurrentFramework(framework);
     // Reset layout to trigger recalculation with new framework
     setLayoutCalculated(false);
@@ -776,7 +819,12 @@ export default function CanvasPage() {
     // Save framework preference to project
     if (projectId) {
       try {
+        console.log('[Canvas Page] Saving framework preference to backend...');
         await setProjectFramework(framework.id);
+        console.log('[Canvas Page] Framework preference saved, forcing suggestions refresh...');
+        // Force refresh suggestions for new framework
+        await mutateSuggestions();
+        console.log('[Canvas Page] Suggestions refresh triggered');
       } catch (error) {
         console.error('[Canvas Page] Failed to save framework preference:', error);
       }
@@ -1092,6 +1140,7 @@ export default function CanvasPage() {
         {/* Header */}
         <CanvasHeader
         currentFramework={currentFramework}
+        projectFramework={projectFramework}
         onFrameworkChange={handleFrameworkChange}
         nodes={nodes}
         suggestions={dbSuggestions}

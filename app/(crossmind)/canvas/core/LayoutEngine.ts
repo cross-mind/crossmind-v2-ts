@@ -122,13 +122,8 @@ export function calculateZoneConfigs(
         configs[bestZone].nodeIds.push(node.id);
         assignedNodeIds.add(node.id);
       }
-    } else {
-      // Fallback: assign to first zone
-      const firstZone = framework.zones[0];
-      if (firstZone && configs[firstZone.id]) {
-        configs[firstZone.id].nodeIds.push(node.id);
-        assignedNodeIds.add(node.id);
-      }
+      // Note: If no affinity found, node remains unassigned
+      // It will be handled by calculateUnassignedNodes()
     }
   });
 

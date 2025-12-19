@@ -16,7 +16,7 @@ type ViewFrameworkZonesProps = {
 export const viewFrameworkZones = ({ session, context }: ViewFrameworkZonesProps) =>
   tool({
     description:
-      "查看项目框架的区域结构，包含每个区域的节点列表（仅标题）。默认使用当前分析的框架。",
+      "查看项目框架的区域结构，包含每个区域的节点列表（仅标题）以及未分配到任何区域的节点。默认使用当前分析的框架。",
     inputSchema: z.object({
       projectFrameworkId: z
         .string()
@@ -41,9 +41,11 @@ export const viewFrameworkZones = ({ session, context }: ViewFrameworkZonesProps
           };
         }
 
-        const zonesWithNodes = await getZonesWithNodeTitles({
+        const { zones: zonesWithNodes, unassignedNodes } = await getZonesWithNodeTitles({
           projectFrameworkId: frameworkId,
         });
+
+        console.log("[viewFrameworkZones] Unassigned nodes count:", unassignedNodes.length);
 
         return {
           framework: {
@@ -56,6 +58,10 @@ export const viewFrameworkZones = ({ session, context }: ViewFrameworkZonesProps
             name: z.name,
             description: z.description,
             nodes: z.nodes,
+          })),
+          unassignedNodes: unassignedNodes.map((n) => ({
+            id: n.id,
+            title: n.title,
           })),
         };
       } catch (error) {

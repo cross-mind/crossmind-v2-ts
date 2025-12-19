@@ -11,6 +11,7 @@ import type { CanvasSuggestion, ProjectFrameworkHealthDimension } from "@/lib/db
 
 interface CanvasHeaderProps {
   currentFramework: ThinkingFramework | null;
+  projectFramework: { id: string; name: string; healthScore?: number | null } | null;
   onFrameworkChange: (framework: ThinkingFramework) => void;
   nodes: CanvasNode[];
   suggestions: CanvasSuggestion[];
@@ -26,6 +27,7 @@ interface CanvasHeaderProps {
 
 export function CanvasHeader({
   currentFramework,
+  projectFramework,
   onFrameworkChange,
   nodes,
   suggestions,
@@ -71,7 +73,7 @@ export function CanvasHeader({
         <HealthOverview
           nodes={nodes}
           suggestions={suggestions}
-          currentFramework={currentFramework}
+          currentFramework={projectFramework}
           dimensions={dimensions}
           onGenerateSuggestions={onGenerateSuggestions}
           isGenerating={isGenerating}

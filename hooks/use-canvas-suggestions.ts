@@ -29,8 +29,17 @@ export function useCanvasSuggestionsByFramework({
   if (frameworkId) params.set("frameworkId", frameworkId);
   if (status) params.set("status", status);
 
+  const swrKey = frameworkId ? `/api/canvas/suggestions?${params.toString()}` : null;
+
+  console.log('[useSuggestionsByFramework] Hook called with:', {
+    projectId,
+    frameworkId,
+    status,
+    swrKey,
+  });
+
   const { data, error, isLoading, mutate } = useSWR<SuggestionsResponse>(
-    frameworkId ? `/api/canvas/suggestions?${params.toString()}` : null,
+    swrKey,
     fetcher,
     {
       revalidateOnFocus: false,
@@ -38,6 +47,14 @@ export function useCanvasSuggestionsByFramework({
       dedupingInterval: 5000,
     }
   );
+
+  console.log('[useSuggestionsByFramework] SWR response:', {
+    swrKey,
+    hasData: !!data,
+    suggestionsCount: data?.suggestions?.length || 0,
+    isLoading,
+    hasError: !!error,
+  });
 
   return {
     suggestions: data?.suggestions || [],

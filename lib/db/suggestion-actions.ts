@@ -5,6 +5,7 @@ import {
   updateCanvasNode,
   createCanvasNode,
   createCanvasActivity,
+  getProjectFrameworkWithZones,
 } from "./queries";
 import type { CanvasSuggestion } from "./schema";
 import { ChatSDKError } from "../errors";
@@ -95,28 +96,103 @@ export async function executeAddNode(
   userId: string,
 ): Promise<SuggestionResult> {
   try {
-    const newNodeData = suggestion.actionParams?.newNode;
+    // Support three formats for backwards compatibility:
+    // 1. Correct format: { newNode: { title, content, targetZone } }
+    // 2. AI-generated format: { zoneName, suggestedContent }
+    // 3. Null actionParams format: parse zone from description
+    let newNodeData = suggestion.actionParams?.newNode;
+
     if (!newNodeData) {
-      throw new Error("New node data is required for add-node suggestion");
+      // Try to parse AI-generated format
+      const { zoneName, suggestedContent } = suggestion.actionParams || {};
+      if (zoneName && suggestedContent) {
+        console.log("[executeAddNode] Converting AI format to standard format");
+
+        // Convert zone name to zoneKey by querying framework zones
+        let targetZoneKey: string | undefined;
+        if (suggestion.projectFrameworkId) {
+          const framework = await getProjectFrameworkWithZones({
+            projectFrameworkId: suggestion.projectFrameworkId,
+          });
+          if (framework?.zones) {
+            const matchedZone = framework.zones.find(z => z.name === zoneName);
+            if (matchedZone) {
+              targetZoneKey = matchedZone.zoneKey;
+              console.log(`[executeAddNode] Resolved zone "${zoneName}" to zoneKey: ${targetZoneKey}`);
+            } else {
+              console.warn(`[executeAddNode] Zone "${zoneName}" not found in framework`);
+            }
+          }
+        }
+
+        newNodeData = {
+          title: suggestion.title || `${zoneName}相关节点`,
+          content: suggestedContent,
+          type: "document",
+          targetZone: targetZoneKey || zoneName, // Use resolved zoneKey or fallback to name
+          tags: [],
+        };
+      } else if (!suggestion.actionParams || suggestion.actionParams === null) {
+        // Format 3: No actionParams at all - parse from description
+        console.log("[executeAddNode] No actionParams provided, parsing from description");
+
+        // Extract zone name from description (format: 在"区域名"区域...)
+        const zoneMatch = suggestion.description.match(/在["""]([^"""]+)["""]区域/);
+        const extractedZoneName = zoneMatch ? zoneMatch[1] : null;
+
+        if (!extractedZoneName) {
+          throw new Error("Cannot extract target zone from description. Description should contain: 在\"区域名\"区域...");
+        }
+
+        console.log(`[executeAddNode] Extracted zone name from description: "${extractedZoneName}"`);
+
+        // Convert zone name to zoneKey by querying framework zones
+        let targetZoneKey: string | undefined;
+        if (suggestion.projectFrameworkId) {
+          const framework = await getProjectFrameworkWithZones({
+            projectFrameworkId: suggestion.projectFrameworkId,
+          });
+          if (framework?.zones) {
+            const matchedZone = framework.zones.find(z => z.name === extractedZoneName);
+            if (matchedZone) {
+              targetZoneKey = matchedZone.zoneKey;
+              console.log(`[executeAddNode] Resolved zone "${extractedZoneName}" to zoneKey: ${targetZoneKey}`);
+            } else {
+              console.warn(`[executeAddNode] Zone "${extractedZoneName}" not found in framework zones:`, framework.zones.map(z => z.name));
+            }
+          }
+        }
+
+        newNodeData = {
+          title: suggestion.title,
+          content: suggestion.description,
+          type: "document",
+          targetZone: targetZoneKey || extractedZoneName,
+          tags: [],
+        };
+      } else {
+        throw new Error("New node data is required for add-node suggestion");
+      }
     }
 
     // Build zoneAffinities if targetZone is specified
     const zoneAffinities: Record<string, Record<string, number>> = {};
     console.log("[executeAddNode] Debug:", {
       targetZone: newNodeData.targetZone,
-      frameworkId: suggestion.frameworkId,
+      projectFrameworkId: suggestion.projectFrameworkId,
       hasTargetZone: !!newNodeData.targetZone,
-      hasFrameworkId: !!suggestion.frameworkId,
+      hasProjectFrameworkId: !!suggestion.projectFrameworkId,
     });
 
-    if (newNodeData.targetZone && suggestion.frameworkId) {
-      // Set high affinity (0.9) for the target zone
-      zoneAffinities[suggestion.frameworkId] = {
+    if (newNodeData.targetZone && suggestion.projectFrameworkId) {
+      // IMPORTANT: Use zoneKey (like "solution", "problem") not zone ID
+      // Frontend expects zoneAffinities to use zoneKey as the key
+      zoneAffinities[suggestion.projectFrameworkId] = {
         [newNodeData.targetZone]: 0.9,
       };
       console.log("[executeAddNode] Built zoneAffinities:", zoneAffinities);
     } else {
-      console.log("[executeAddNode] Skipping zoneAffinities - missing targetZone or frameworkId");
+      console.log("[executeAddNode] Skipping zoneAffinities - missing targetZone or projectFrameworkId");
     }
 
     // Create new node
@@ -315,11 +391,15 @@ export async function executeSuggestion(
       return executeContentSuggestion(suggestion, userId);
 
     case "health-issue":
-      // Health issues are informational only, no action needed
+      // Health issues open AI chat for discussion
       return {
-        success: false,
+        success: true,
         type: "health-issue",
-        error: "Health issues cannot be executed directly",
+        changes: {
+          action: "open-ai-chat",
+          nodeId: suggestion.nodeId,
+          prefilledPrompt: `${suggestion.title}\n\n${suggestion.description}\n\n请帮我分析这个问题并给出具体的改进建议。`,
+        },
       };
 
     default:

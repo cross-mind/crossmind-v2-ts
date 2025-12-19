@@ -27,6 +27,8 @@ export function useNodeAffinities(projectId: string, frameworkId: string | null)
   return {
     nodeAffinities: data?.affinities || {}, // { nodeId: { zoneKey: weight } }
     updateAffinity,
-    isLoading: !data && !error,
+    // When frameworkId is null, don't fetch (no project_framework record)
+    // In this case, consider loading as false (no data to load) with empty affinities
+    isLoading: frameworkId ? (!data && !error) : false,
   };
 }

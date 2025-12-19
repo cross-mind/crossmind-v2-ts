@@ -50,18 +50,28 @@ export async function POST(
     }
 
     // Execute the suggestion
+    console.log("[Apply Suggestion API] Executing suggestion:", {
+      id: suggestion.id,
+      type: suggestion.type,
+      hasActionParams: !!suggestion.actionParams,
+      actionParams: suggestion.actionParams,
+    });
+
     const result = await executeSuggestion(suggestion, session.user.id);
 
+    console.log("[Apply Suggestion API] Execution result:", result);
+
     if (!result.success) {
+      console.error("[Apply Suggestion API] Execution failed:", result.error);
       return new ChatSDKError(
         "bad_request:suggestions",
         result.error || "Failed to execute suggestion"
       ).toResponse();
     }
 
-    // For content-suggestion, don't mark as accepted yet
-    // It will be marked when user sends first AI chat message
-    if (suggestion.type !== "content-suggestion") {
+    // For content-suggestion and health-issue, don't mark as accepted yet
+    // They open AI chat and will be marked when user sends first message
+    if (suggestion.type !== "content-suggestion" && suggestion.type !== "health-issue") {
       await updateCanvasSuggestion({
         id,
         status: "accepted",

@@ -25,12 +25,14 @@ import { viewFrameworkZones } from "@/lib/ai/tools/view-framework-zones";
 import { viewNode } from "@/lib/ai/tools/view-node";
 import { createSuggestion } from "@/lib/ai/tools/create-suggestion";
 import { updateFrameworkHealth } from "@/lib/ai/tools/update-framework-health";
+import { assignNodeToZone } from "@/lib/ai/tools/assign-node-to-zone";
 import {
   getMessagesByChatId,
   saveMessages,
   getProjectById,
   getProjectFrameworkWithZones,
   getChatById,
+  createStreamId,
 } from "@/lib/db/queries";
 import { ChatSDKError } from "@/lib/errors";
 import type { AppUsage } from "@/lib/usage";
@@ -147,6 +149,22 @@ async function healthAnalysisChatHandler(request: Request) {
 
     // 7. Load message history
     const messagesFromDb = await getMessagesByChatId({ id });
+
+    // 7.5. Check for duplicate messages (safety net)
+    const lastMessage = messagesFromDb[messagesFromDb.length - 1];
+    if (lastMessage && lastMessage.role === "user" && lastMessage.id === message.id) {
+      console.warn("[Health Analysis Chat] Duplicate message detected", {
+        chatId: id,
+        messageId: message.id,
+        userId: session.user.id,
+      });
+
+      return new Response(JSON.stringify({ error: "Message already exists" }), {
+        status: 409,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
     const uiMessages = [...convertToUIMessages(messagesFromDb), message];
 
     // 8. Save user message
@@ -160,6 +178,10 @@ async function healthAnalysisChatHandler(request: Request) {
         createdAt: new Date(),
       }],
     });
+
+    // 8.5. Create streamId for resumable stream
+    const streamId = generateUUID();
+    await createStreamId({ streamId, chatId: id });
 
     // 9. Build health analysis system prompt
     const promptContext: HealthAnalysisPromptContext = {
@@ -241,6 +263,7 @@ async function healthAnalysisChatHandler(request: Request) {
             "viewNode",
             "createSuggestion",
             "updateFrameworkHealth",
+            "assignNodeToZone",
           ],
           experimental_transform: smoothStream({ chunking: "word" }),
           experimental_telemetry: {
@@ -270,6 +293,10 @@ async function healthAnalysisChatHandler(request: Request) {
             updateFrameworkHealth: updateFrameworkHealth({
               session,
               dataStream,
+              context: toolContext,
+            }),
+            assignNodeToZone: assignNodeToZone({
+              session,
               context: toolContext,
             }),
           },
@@ -311,7 +338,24 @@ async function healthAnalysisChatHandler(request: Request) {
       },
     });
 
-    // Force flush traces before serverless function terminates
+    // Enable resumable stream (requires Redis)
+    const streamContext = getStreamContext();
+
+    if (streamContext) {
+      // Force flush traces before serverless function terminates
+      after(async () => {
+        await langfuseSpanProcessor.forceFlush();
+        console.log("[Langfuse] Flushed traces for health-analysis-chat");
+      });
+
+      return new Response(
+        await streamContext.resumableStream(streamId, () =>
+          stream.pipeThrough(new JsonToSseTransformStream())
+        )
+      );
+    }
+
+    // Fallback: if Redis is not configured, return stream directly
     after(async () => {
       await langfuseSpanProcessor.forceFlush();
       console.log("[Langfuse] Flushed traces for health-analysis-chat");

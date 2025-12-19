@@ -271,16 +271,18 @@ const chatHandler = async (request: Request) => {
       },
     });
 
-    // const streamContext = getStreamContext();
+    // Enable resumable stream (requires Redis)
+    const streamContext = getStreamContext();
 
-    // if (streamContext) {
-    //   return new Response(
-    //     await streamContext.resumableStream(streamId, () =>
-    //       stream.pipeThrough(new JsonToSseTransformStream())
-    //     )
-    //   );
-    // }
+    if (streamContext) {
+      return new Response(
+        await streamContext.resumableStream(streamId, () =>
+          stream.pipeThrough(new JsonToSseTransformStream())
+        )
+      );
+    }
 
+    // Fallback: if Redis is not configured, return stream directly
     return new Response(stream.pipeThrough(new JsonToSseTransformStream()));
   } catch (error) {
     const vercelId = request.headers.get("x-vercel-id");

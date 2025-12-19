@@ -55,6 +55,13 @@ async function ChatPage({ params }: { params: Promise<{ id: string }> }) {
     ? "/api/canvas/health-analysis/chat"
     : "/api/chat";
 
+  // Pass chat metadata for health analysis
+  const chatMetadata = chat.type === "health-analysis" ? {
+    type: chat.type,
+    projectId: chat.projectId,
+    projectFrameworkId: chat.projectFrameworkId,
+  } : undefined;
+
   if (!chatModelFromCookie) {
     return (
       <>
@@ -67,6 +74,7 @@ async function ChatPage({ params }: { params: Promise<{ id: string }> }) {
           initialVisibilityType={chat.visibility}
           isReadonly={session?.user?.id !== chat.userId}
           apiEndpoint={apiEndpoint}
+          chatMetadata={chatMetadata}
         />
         <DataStreamHandler />
       </>
@@ -84,6 +92,7 @@ async function ChatPage({ params }: { params: Promise<{ id: string }> }) {
         initialVisibilityType={chat.visibility}
         isReadonly={session?.user?.id !== chat.userId}
         apiEndpoint={apiEndpoint}
+        chatMetadata={chatMetadata}
       />
       <DataStreamHandler />
     </>

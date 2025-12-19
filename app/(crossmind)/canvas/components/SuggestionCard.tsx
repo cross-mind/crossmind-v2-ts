@@ -91,6 +91,11 @@ export function SuggestionCard({
                 <MessageSquare className="h-3 w-3 mr-1" />
                 与 AI 讨论
               </>
+            ) : suggestion.type === "health-issue" ? (
+              <>
+                <MessageSquare className="h-3 w-3 mr-1" />
+                与 AI 讨论
+              </>
             ) : (
               <>
                 <Check className="h-3 w-3 mr-1" />
@@ -152,7 +157,7 @@ export function SuggestionCard({
 
       <div className="flex gap-3 pt-2">
         <Button onClick={onApply} size="sm" className="flex-1">
-          {suggestion.type === "content-suggestion" ? (
+          {suggestion.type === "content-suggestion" || suggestion.type === "health-issue" ? (
             <>
               <MessageSquare className="h-4 w-4 mr-2" />
               与 AI 讨论

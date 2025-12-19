@@ -2,7 +2,7 @@ import { auth } from "@/app/(auth)/auth";
 import { getProjectFramework, setProjectFramework, getProjectFrameworkDimensions } from "@/lib/db/queries";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { projectFramework, projectFrameworkZone } from "@/lib/db/schema";
+import { project, projectFramework, projectFrameworkZone } from "@/lib/db/schema";
 import { eq, and, asc } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
@@ -17,13 +17,31 @@ export async function GET(
 ) {
   const { id: projectId } = await params;
 
-  // First try to get ProjectFramework (project-specific snapshot)
+  // First get the project's default framework ID
+  const projects = await db
+    .select({ defaultFrameworkId: project.defaultFrameworkId })
+    .from(project)
+    .where(eq(project.id, projectId))
+    .limit(1);
+
+  const defaultFrameworkId = projects[0]?.defaultFrameworkId;
+
+  if (!defaultFrameworkId) {
+    return Response.json({
+      framework: null,
+      projectFrameworkId: null,
+      dimensions: [],
+    });
+  }
+
+  // Try to get ProjectFramework for the current framework
   const projectFrameworks = await db
     .select()
     .from(projectFramework)
     .where(
       and(
         eq(projectFramework.projectId, projectId),
+        eq(projectFramework.sourceFrameworkId, defaultFrameworkId),
         eq(projectFramework.isActive, true)
       )
     )

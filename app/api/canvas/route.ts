@@ -34,6 +34,11 @@ export async function GET(request: Request) {
 
   try {
     const nodes = await getCanvasNodesByProjectId({ projectId });
+    console.log('[Canvas API] Fetched nodes:', {
+      count: nodes.length,
+      nodeIds: nodes.map(n => n.id).slice(0, 5),
+      firstNodeTitles: nodes.map(n => n.title).slice(0, 5)
+    });
     return NextResponse.json({ nodes }, { status: 200 });
   } catch (error) {
     if (error instanceof ChatSDKError) {

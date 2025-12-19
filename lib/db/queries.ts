@@ -651,29 +651,78 @@ export async function createCanvasNode({
 
     // If zoneAffinities provided, also write to CanvasNodeZoneAffinity table
     if (zoneAffinities && Object.keys(zoneAffinities).length > 0) {
-      for (const [frameworkId, zones] of Object.entries(zoneAffinities)) {
-        for (const [zoneKey, weight] of Object.entries(zones)) {
-          // Find the zone ID by zoneKey
-          const [zone] = await db
-            .select({ id: frameworkZone.id })
-            .from(frameworkZone)
-            .where(
-              and(
-                eq(frameworkZone.frameworkId, frameworkId),
-                eq(frameworkZone.zoneKey, zoneKey)
-              )
-            )
-            .limit(1);
+      console.log("[createCanvasNode] Starting zone affinity creation:", JSON.stringify(zoneAffinities));
 
-          if (zone) {
+      for (const [projectFrameworkId, zones] of Object.entries(zoneAffinities)) {
+        console.log("[createCanvasNode] Processing projectFrameworkId:", projectFrameworkId);
+        console.log("[createCanvasNode] Zones object type:", typeof zones, "value:", JSON.stringify(zones));
+
+        // Get the platform framework ID from project framework (required for CanvasNodeZoneAffinity)
+        const [pf] = await db
+          .select({ frameworkId: projectFramework.sourceFrameworkId })
+          .from(projectFramework)
+          .where(eq(projectFramework.id, projectFrameworkId))
+          .limit(1);
+
+        console.log("[createCanvasNode] Platform framework query result:", pf ? { frameworkId: pf.frameworkId } : "undefined");
+
+        if (!pf) {
+          console.warn(`[createCanvasNode] Project framework not found: ${projectFrameworkId}`);
+          continue;
+        }
+
+        console.log("[createCanvasNode] About to iterate zones with pf.frameworkId:", pf.frameworkId);
+
+        for (const [zoneIdOrKey, weight] of Object.entries(zones)) {
+          console.log("[createCanvasNode] Processing zone:", zoneIdOrKey, "weight:", weight);
+          // Support both zoneKey (string like "problem") and zoneId (UUID)
+          // First try to match as zoneId directly, then fall back to zoneKey lookup
+          let zoneId: string | undefined;
+
+          // Check if it's a valid UUID (simple regex check)
+          const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(zoneIdOrKey);
+
+          if (isUUID) {
+            // Direct zone ID provided
+            zoneId = zoneIdOrKey;
+          } else {
+            // It's a zoneKey, need to resolve to zone ID
+            const [zone] = await db
+              .select({ id: frameworkZone.id })
+              .from(frameworkZone)
+              .where(
+                and(
+                  eq(frameworkZone.frameworkId, pf.frameworkId),
+                  eq(frameworkZone.zoneKey, zoneIdOrKey)
+                )
+              )
+              .limit(1);
+
+            if (zone) {
+              zoneId = zone.id;
+            }
+          }
+
+          if (zoneId) {
+            console.log("[createCanvasNode] Inserting zone affinity:", {
+              nodeId: newNode.id,
+              frameworkId: pf.frameworkId,
+              zoneId: zoneId,
+              affinityWeight: weight,
+            });
+
             await db.insert(canvasNodeZoneAffinity).values({
               nodeId: newNode.id,
-              frameworkId,
-              zoneId: zone.id,
+              frameworkId: pf.frameworkId,  // Use platform framework ID
+              zoneId: zoneId,
               affinityWeight: weight,
               createdAt: new Date(),
               updatedAt: new Date(),
             });
+
+            console.log("[createCanvasNode] Zone affinity inserted successfully");
+          } else {
+            console.warn("[createCanvasNode] Skipping zone affinity - no valid zoneId found for:", zoneIdOrKey);
           }
         }
       }
@@ -681,6 +730,16 @@ export async function createCanvasNode({
 
     return newNode;
   } catch (error: any) {
+    // Log the actual error for debugging
+    console.error("[createCanvasNode] Database error:", {
+      message: error?.message,
+      code: error?.code,
+      detail: error?.detail,
+      constraint: error?.constraint,
+      table: error?.table,
+      column: error?.column,
+    });
+
     // Check if error is due to self-reference constraint violation
     if (error?.code === "23514" || error?.message?.includes("no_self_reference")) {
       throw new ChatSDKError(
@@ -962,7 +1021,8 @@ export async function getCanvasSuggestionById({ id }: { id: string }) {
 
 export async function createCanvasSuggestion({
   projectId,
-  frameworkId,
+  projectFrameworkId,
+  chatId,
   nodeId,
   type,
   title,
@@ -974,7 +1034,8 @@ export async function createCanvasSuggestion({
   source,
 }: {
   projectId: string;
-  frameworkId?: string;
+  projectFrameworkId?: string;
+  chatId?: string;
   nodeId?: string;
   type: "add-node" | "add-tag" | "refine-content" | "content-suggestion" | "health-issue";
   title: string;
@@ -990,7 +1051,8 @@ export async function createCanvasSuggestion({
       .insert(canvasSuggestion)
       .values({
         projectId,
-        frameworkId,
+        projectFrameworkId,
+        chatId,
         nodeId,
         type,
         title,
@@ -1715,6 +1777,7 @@ export async function getProjectFrameworkWithZones({
 
 /**
  * Get zones with node titles for a project framework
+ * Also returns unassigned nodes (nodes without framework associations)
  */
 export async function getZonesWithNodeTitles({
   projectFrameworkId,
@@ -1722,6 +1785,20 @@ export async function getZonesWithNodeTitles({
   projectFrameworkId: string;
 }) {
   try {
+    // Get project framework to extract projectId and sourceFrameworkId
+    const [framework] = await db
+      .select({
+        projectId: projectFramework.projectId,
+        sourceFrameworkId: projectFramework.sourceFrameworkId
+      })
+      .from(projectFramework)
+      .where(eq(projectFramework.id, projectFrameworkId))
+      .limit(1);
+
+    if (!framework) {
+      return { zones: [], unassignedNodes: [] };
+    }
+
     // Get zones for this framework
     const zones = await db
       .select()
@@ -1733,6 +1810,8 @@ export async function getZonesWithNodeTitles({
     const zonesWithNodes = await Promise.all(
       zones.map(async (zone) => {
         // Get nodes associated with this zone via affinity
+        // CRITICAL: Use sourceZoneId (platform zone) to match CanvasNodeZoneAffinity.zoneId
+        // Filter by projectId and only include nodes with affinity weight > 0
         const nodeAffinities = await db
           .select({
             nodeId: canvasNodeZoneAffinity.nodeId,
@@ -1741,8 +1820,17 @@ export async function getZonesWithNodeTitles({
           })
           .from(canvasNodeZoneAffinity)
           .innerJoin(canvasNode, eq(canvasNodeZoneAffinity.nodeId, canvasNode.id))
-          .where(eq(canvasNodeZoneAffinity.zoneId, zone.id))
+          .where(
+            and(
+              eq(canvasNodeZoneAffinity.zoneId, zone.sourceZoneId),
+              eq(canvasNode.projectId, framework.projectId),
+              gt(canvasNodeZoneAffinity.affinityWeight, 0)
+            )
+          )
           .orderBy(desc(canvasNodeZoneAffinity.affinityWeight));
+
+        console.log(`[getZonesWithNodeTitles] Zone "${zone.name}": ${nodeAffinities.length} nodes`,
+          nodeAffinities.map(na => `${na.nodeTitle} (weight: ${na.affinityWeight})`));
 
         return {
           ...zone,
@@ -1755,7 +1843,43 @@ export async function getZonesWithNodeTitles({
       })
     );
 
-    return zonesWithNodes;
+    // Get all assigned node IDs (nodes that appear in any zone)
+    const assignedNodeIds = new Set(
+      zonesWithNodes.flatMap(zone => zone.nodes.map(n => n.id))
+    );
+
+    // Get unassigned nodes: nodes that don't have any affinity record for this framework
+    // Check both: no record in CanvasNodeZoneAffinity AND no projectFrameworkId in zoneAffinities JSONB
+    const allProjectNodes = await db
+      .select({
+        id: canvasNode.id,
+        title: canvasNode.title,
+        zoneAffinities: canvasNode.zoneAffinities,
+      })
+      .from(canvasNode)
+      .where(eq(canvasNode.projectId, framework.projectId));
+
+    const unassignedNodes = allProjectNodes
+      .filter(node => {
+        // Node is unassigned if:
+        // 1. Not in assignedNodeIds (no CanvasNodeZoneAffinity record)
+        // AND 2. No entry in zoneAffinities JSONB for this projectFrameworkId
+        const hasAffinityRecord = assignedNodeIds.has(node.id);
+        const hasJsonbAffinity = node.zoneAffinities &&
+          projectFrameworkId in (node.zoneAffinities as Record<string, any>);
+
+        return !hasAffinityRecord && !hasJsonbAffinity;
+      })
+      .map(node => ({
+        id: node.id,
+        title: node.title,
+      }));
+
+    console.log(`[getZonesWithNodeTitles] Total zones: ${zonesWithNodes.length}, ` +
+      `Assigned nodes: ${assignedNodeIds.size}, ` +
+      `Unassigned nodes: ${unassignedNodes.length}`);
+
+    return { zones: zonesWithNodes, unassignedNodes };
   } catch (_error) {
     throw new ChatSDKError("bad_request:database", "Failed to get zones with node titles");
   }

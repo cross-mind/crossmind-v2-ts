@@ -176,7 +176,7 @@ export async function POST(request: Request) {
 
         const suggestion = await createCanvasSuggestion({
           projectId,
-          frameworkId,
+          projectFrameworkId: frameworkId,
           nodeId,
           type: data.type,
           title: data.title,

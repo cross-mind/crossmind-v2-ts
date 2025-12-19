@@ -225,20 +225,24 @@ export function Chat({
   const searchParams = useSearchParams();
   const query = searchParams.get("query");
 
-  const [hasAppendedQuery, setHasAppendedQuery] = useState(false);
+  // Use refs to ensure query is only handled once, avoiding sendMessage dependency
+  const queryHandledRef = useRef(false);
+  const queryRef = useRef<string | null>(null);
 
   useEffect(() => {
     // Only handle query parameter in full-page mode (not in panel mode for Canvas)
-    if (query && !hasAppendedQuery && mode === "full-page") {
+    if (query && query !== queryRef.current && !queryHandledRef.current && mode === "full-page") {
+      queryRef.current = query;
+      queryHandledRef.current = true;
+
       sendMessage({
         role: "user" as const,
         parts: [{ type: "text", text: query }],
       });
 
-      setHasAppendedQuery(true);
       window.history.replaceState({}, "", `/chat/${id}`);
     }
-  }, [query, sendMessage, hasAppendedQuery, id, mode]);
+  }, [query, mode, id]); // Removed sendMessage to prevent re-execution
 
   const { data: votes } = useSWR<Vote[]>(
     messages.length >= 2 ? `/api/vote?chatId=${id}` : null,
