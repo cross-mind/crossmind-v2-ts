@@ -64,8 +64,8 @@ export function HealthOverview({
       )
     : 0);
 
-  const healthLevelColor = avgScore >= 85 ? "text-green-600" : avgScore >= 70 ? "text-blue-600" : avgScore >= 50 ? "text-yellow-600" : "text-red-600";
-  const healthLevelBg = avgScore >= 85 ? "bg-green-50" : avgScore >= 70 ? "bg-blue-50" : avgScore >= 50 ? "bg-yellow-50" : "bg-red-50";
+  const healthLevelColor = avgScore >= 85 ? "text-green-600 dark:text-green-400" : avgScore >= 70 ? "text-blue-600 dark:text-blue-400" : avgScore >= 50 ? "text-yellow-600 dark:text-yellow-400" : "text-red-600 dark:text-red-400";
+  const healthLevelBg = avgScore >= 85 ? "bg-green-50 dark:bg-green-950/30" : avgScore >= 70 ? "bg-blue-50 dark:bg-blue-950/30" : avgScore >= 50 ? "bg-yellow-50 dark:bg-yellow-950/30" : "bg-red-50 dark:bg-red-950/30";
 
   // 创建 nodeId 到 nodeTitle 的映射
   const nodeIdToTitle = new Map(nodes.map(n => [n.id, n.title]));
@@ -172,8 +172,8 @@ export function HealthOverview({
             <>
               <span className="text-xs opacity-60">|</span>
               <div className="flex items-center gap-1">
-                <Sparkles className="h-3 w-3 text-purple-600" />
-                <span className="text-xs font-medium text-purple-600">{allSuggestions.length} 条建议</span>
+                <Sparkles className="h-3 w-3 text-purple-600 dark:text-purple-400" />
+                <span className="text-xs font-medium text-purple-600 dark:text-purple-400">{allSuggestions.length} 条建议</span>
               </div>
             </>
           )}
@@ -211,8 +211,8 @@ export function HealthOverview({
               <div className="divide-y divide-border/50">
                 {dimensions.map((dimension) => {
                   const score = Math.round(dimension.score);
-                  const scoreColor = score >= 85 ? "text-green-600" : score >= 70 ? "text-blue-600" : score >= 50 ? "text-yellow-600" : "text-red-600";
-                  const scoreBg = score >= 85 ? "bg-green-50" : score >= 70 ? "bg-blue-50" : score >= 50 ? "bg-yellow-50" : "bg-red-50";
+                  const scoreColor = score >= 85 ? "text-green-600 dark:text-green-400" : score >= 70 ? "text-blue-600 dark:text-blue-400" : score >= 50 ? "text-yellow-600 dark:text-yellow-400" : "text-red-600 dark:text-red-400";
+                  const scoreBg = score >= 85 ? "bg-green-50 dark:bg-green-950/30" : score >= 70 ? "bg-blue-50 dark:bg-blue-950/30" : score >= 50 ? "bg-yellow-50 dark:bg-yellow-950/30" : "bg-red-50 dark:bg-red-950/30";
 
                   return (
                     <div
@@ -259,13 +259,13 @@ export function HealthOverview({
                     // 根据优先级确定圆点颜色类名（红黄蓝灰）
                     let dotClassName = "h-2 w-2 rounded-full shrink-0";
                     if (suggestion.priority === "critical") {
-                      dotClassName += " bg-red-500";
+                      dotClassName += " bg-red-500 dark:bg-red-400";
                     } else if (suggestion.priority === "high") {
-                      dotClassName += " bg-yellow-500";
+                      dotClassName += " bg-yellow-500 dark:bg-yellow-400";
                     } else if (suggestion.priority === "medium") {
-                      dotClassName += " bg-blue-500";
+                      dotClassName += " bg-blue-500 dark:bg-blue-400";
                     } else {
-                      dotClassName += " bg-gray-400";
+                      dotClassName += " bg-gray-400 dark:bg-gray-500";
                     }
 
                     if (!canvasSuggestion) {

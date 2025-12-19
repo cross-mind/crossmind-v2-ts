@@ -1148,7 +1148,6 @@ export default function CanvasPage() {
         suggestionsLoading={suggestionsLoading}
         isGenerating={isGenerating}
         elapsedTime={elapsedTime}
-        onCreateNode={() => setNodeDialogOpen(true)}
         onGenerateSuggestions={handleGenerateSuggestions}
         onApplySuggestion={handleApplySuggestion}
         onDismissSuggestion={handleDismissSuggestion}
